@@ -307,7 +307,7 @@ class SentinelService:
                     title=doc.title,
                     product=doc.product,
                     region=doc.region,
-                    access_level=doc.access_level,
+                    access_level=doc.access_level.value if hasattr(doc.access_level, "value") else str(doc.access_level),
                     version=doc.version,
                     effective_date=doc.effective_date,
                     expiry_date=doc.expiry_date,

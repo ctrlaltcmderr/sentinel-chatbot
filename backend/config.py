@@ -22,3 +22,8 @@ CORS_ORIGINS = [
 # Admin API Key
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "sentinel-enterprise-key-2026")
 
+# Server host & port
+HOST = os.getenv("HOST", "127.0.0.1")
+PORT = int(os.getenv("PORT", "8000"))
+
+

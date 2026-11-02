@@ -89,7 +89,7 @@ class SentinelChatbot:
     all 6 subsystems for real-time customer interaction and operational safety.
     """
 
-    def __init__(self, settings: Optional[Settings] = None) -> None:
+    def __init__(self, settings: Optional[Settings] = None, seed_default_docs: bool = True) -> None:
         self.settings = settings or get_settings()
 
         # Component 1: Sentiment Analysis & Escalation
@@ -149,7 +149,90 @@ class SentinelChatbot:
         self.session_manager = SessionManager(config=self.settings.session)
         self.input_processor = InputProcessor(config=self.settings.language, language_detector=self.lang_detector)
 
+        if seed_default_docs:
+            self.seed_default_knowledge()
+
         logger.info("Sentinel Chatbot Engine initialized successfully.")
+
+    def seed_default_knowledge(self) -> None:
+        """Seed foundational knowledge documents into DocumentStore if empty."""
+        if len(self.doc_store._documents) > 0:
+            return
+
+        docs = [
+            KnowledgeDocument(
+                id="kb-war-2025",
+                title="Hardware Warranty Policy 2025-2026",
+                product="UltraLaptop",
+                region="global",
+                access_level=AccessLevel.PUBLIC,
+                version=2,
+                effective_date=datetime(2025, 1, 1),
+                expiry_date=datetime(2026, 12, 31),
+                content=(
+                    "UltraLaptop models include a 2-year premium on-site warranty covering hardware defects "
+                    "and accidental damage protection with a $0 deductible."
+                ),
+            ),
+            KnowledgeDocument(
+                id="kb-war-2024",
+                title="Hardware Warranty Policy 2024",
+                product="UltraLaptop",
+                region="global",
+                access_level=AccessLevel.PUBLIC,
+                version=1,
+                effective_date=datetime(2024, 1, 1),
+                expiry_date=datetime(2024, 12, 31),
+                content=(
+                    "UltraLaptop 2024 models include a 1-year basic replacement warranty covering manufacturer "
+                    "defects only. Accidental liquid and drop damage are not covered under standard terms."
+                ),
+            ),
+            KnowledgeDocument(
+                id="kb-ret-2026",
+                title="Global Return and Refund Policy",
+                product="General",
+                region="global",
+                access_level=AccessLevel.PUBLIC,
+                version=1,
+                effective_date=datetime(2025, 6, 1),
+                expiry_date=None,
+                content=(
+                    "Customers may return items within 30 days of delivery for a full refund to the original payment method. "
+                    "Items must be in original condition with packaging. Refunds are processed within 3 to 5 business days."
+                ),
+            ),
+            KnowledgeDocument(
+                id="kb-sec-2026",
+                title="Account Security & Compromise Protocol",
+                product="General",
+                region="global",
+                access_level=AccessLevel.INTERNAL,
+                version=1,
+                effective_date=datetime(2025, 1, 1),
+                expiry_date=None,
+                content=(
+                    "When an account compromise or unauthorized access is reported, the security team must immediately "
+                    "suspend active sessions, initiate password resets, and audit the last 48 hours of transactions."
+                ),
+            ),
+            KnowledgeDocument(
+                id="kb-settle-playbook",
+                title="Executive Settlement Playbook",
+                product="All",
+                region="global",
+                access_level=AccessLevel.CONFIDENTIAL,
+                version=1,
+                effective_date=datetime(2025, 1, 1),
+                expiry_date=None,
+                content=(
+                    "Authorized directors may settle legal claims up to $100,000 without board approval under strict NDA."
+                ),
+            ),
+        ]
+        for doc in docs:
+            self.doc_store.add_document(doc)
+
 
     def handle_message(
         self,
@@ -243,14 +326,53 @@ class SentinelChatbot:
 
         escalation_record: Optional[EscalationRecord] = self.escalation_manager.check_escalation(ctx, sentiment_res)
 
-        # 5. RAG Knowledge Retrieval & Answer Generation
-        retrieved_docs = self.retriever.retrieve(
-            query=cleaned_text,
-            user_access_level=user_access_level,
-            reference_date=reference_date,
-        )
-        rag_res = self.answer_generator.generate_answer(cleaned_text, retrieved_docs)
-        base_answer = rag_res.answer
+        # 5. RAG Knowledge Retrieval & Conversational Handling
+        import re
+        norm_text = cleaned_text.strip().lower()
+        is_greeting = bool(re.match(r"^(hi|hello|hey|howdy|greetings|good\s+(morning|afternoon|evening|day))[\s!.,?]*$", norm_text))
+        is_capabilities_query = bool(re.match(r"^(what\s+can\s+you\s+do|who\s+are\s+you|help(\s+me)?|what\s+are\s+your\s+capabilities)[\s!.,?]*$", norm_text))
+        is_closing = bool(re.match(r"^(thanks|thank\s+you|thx|many\s+thanks|bye|goodbye|have\s+a\s+good\s+day)[\s!.,?]*$", norm_text))
+
+        if (is_greeting or is_capabilities_query) and not escalation_record and not sentiment_res.is_high_risk:
+            base_answer = (
+                "Hello! I am Sentinel, your AI Customer Support Assistant.\n\n"
+                "I can help you with:\n"
+                "• Hardware warranty terms and coverage details\n"
+                "• Return, replacement, and refund policies\n"
+                "• Billing inquiries and payment issues\n"
+                "• Account security, password resets, and access protection\n"
+                "• Structured escalation to specialized support teams\n\n"
+                "How can I assist you today?"
+            )
+            rag_res = RAGResult(
+                answer=base_answer,
+                confidence=1.0,
+                sources=[],
+                is_ambiguous=False,
+                requires_clarification=False,
+                clarification_message="",
+            )
+        elif is_closing and not escalation_record and not sentiment_res.is_high_risk:
+            base_answer = (
+                "You're very welcome! If you have any further questions or need additional support, "
+                "feel free to reach out anytime. Have a wonderful day!"
+            )
+            rag_res = RAGResult(
+                answer=base_answer,
+                confidence=1.0,
+                sources=[],
+                is_ambiguous=False,
+                requires_clarification=False,
+                clarification_message="",
+            )
+        else:
+            retrieved_docs = self.retriever.retrieve(
+                query=cleaned_text,
+                user_access_level=user_access_level,
+                reference_date=reference_date,
+            )
+            rag_res = self.answer_generator.generate_answer(cleaned_text, retrieved_docs)
+            base_answer = rag_res.answer
 
         # 6. Dynamic Tone Adjustment (preserving business policies)
         final_response = self.tone_adjuster.adjust_response(base_answer, sentiment_res, ctx)

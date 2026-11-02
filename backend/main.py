@@ -1,7 +1,15 @@
 import logging
 import os
+import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
+from pathlib import Path
+
+# Ensure project root is in sys.path when running script directly
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -278,4 +286,18 @@ async def global_exception_handler(request: Request, exc: Exception):
 FRONTEND_DIST = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
 if os.path.isdir(FRONTEND_DIST):
     app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    from backend.config import HOST, PORT
+
+    print("=" * 60)
+    print("   SENTINEL CHATBOT - ENTERPRISE BACKEND SERVER")
+    print(f"   API Server : http://{HOST}:{PORT}")
+    print(f"   Swagger UI : http://{HOST}:{PORT}/docs")
+    print(f"   Web App    : http://{HOST}:{PORT}/")
+    print("=" * 60)
+    uvicorn.run("backend.main:app", host=HOST, port=PORT, reload=True)
+
 
