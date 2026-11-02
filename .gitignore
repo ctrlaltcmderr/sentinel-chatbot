@@ -24,11 +24,23 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual environments
+# Virtual environments & Local Binaries
 venv/
 .venv/
 env/
 ENV/
+.node/
+
+# Node & Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+dist/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
 
 # IDE & Editor files
 .vscode/
