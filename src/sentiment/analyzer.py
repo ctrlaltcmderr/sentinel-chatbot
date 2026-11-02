@@ -202,6 +202,13 @@ _RISK_PATTERNS: Dict[str, List[str]] = {
         r"\btake\s+(?:you|this)\s+to\s+court\b",
         r"\breport\s+(?:you\s+)?to\s+(?:authorities|ftc|police|regulator)\b",
     ],
+    "crisis_safety": [
+        r"\b(?:hurt|harm|kill)\s+myself\b",
+        r"\bsuicid(?:e|al)\b",
+        r"\bend\s+my\s+life\b",
+        r"\bdon'?t\s+want\s+to\s+live\b",
+        r"\bcannot\s+cope\b.*\b(?:hurt|harm)\b",
+    ],
 }
 
 
@@ -338,6 +345,10 @@ class SentimentAnalyzer:
                     if cat in {"account_compromise", "unauthorized_payment"}:
                         scores["urgent"] += 0.45
                         scores["negative"] += 0.25
+                        scores["neutral"] = 0.0
+                    elif cat == "crisis_safety":
+                        scores["urgent"] += 0.90
+                        scores["negative"] += 0.50
                         scores["neutral"] = 0.0
                     elif cat == "duplicate_payment":
                         scores["urgent"] += 0.30
@@ -481,7 +492,7 @@ class SentimentAnalyzer:
         is_high_risk = len(triggers) > 0
         primary_category = matched_categories[0] if matched_categories else None
 
-        if primary_category in {"account_compromise", "unauthorized_payment", "legal_threat"}:
+        if primary_category in {"account_compromise", "unauthorized_payment", "legal_threat", "crisis_safety"}:
             risk_level = "critical"
         elif primary_category == "duplicate_payment":
             risk_level = "high"

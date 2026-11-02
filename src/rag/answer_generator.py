@@ -119,6 +119,80 @@ class AnswerGenerator:
                     metadata={"intent": "order_tracking", "order_id": order_id},
                 )
 
+        # 3b. Handle Knowledge Base Inventory Query
+        if intent_res.intent == QueryIntent.KB_INVENTORY:
+            answer = (
+                "I can answer questions based on the following verified public knowledge base sources:\n\n"
+                "• Hardware Warranty Policy (coverage terms, accidental damage, repair procedures for UltraLaptop)\n"
+                "• Global Return and Refund Policy (30-day return window, condition guidelines, refund processing)\n"
+                "• Account Security & Unauthorized Access Policy (account compromise, password protection)\n"
+                "• Payment Security & Fraud Protection Policy (unauthorized charges, dispute protocols)\n"
+                "• Shipping and Delivery Policy (delivery timelines, carrier investigations)\n\n"
+                "Please let me know which policy or topic you would like information on."
+            )
+            return RAGResult(
+                answer=answer,
+                confidence=1.0,
+                sources=[],
+                is_ambiguous=False,
+                requires_clarification=False,
+                clarification_message="",
+                unsupported_claims=[],
+                metadata={"intent": "kb_inventory"},
+            )
+
+        # 3c. Handle Cancellation Queries (unindexed policy)
+        if intent_res.intent == QueryIntent.CANCELLATION:
+            answer = (
+                "I apologize, but an authoritative cancellation policy is currently not available in our indexed knowledge base. "
+                "Because I cannot verify cancellation terms from an authoritative source, I will not invent policy conditions. "
+                "Would you like me to open a support ticket for our team to assist with your cancellation request?"
+            )
+            return RAGResult(
+                answer=answer,
+                confidence=0.95,
+                sources=[],
+                is_ambiguous=False,
+                requires_clarification=True,
+                clarification_message="Cancellation policy is not currently indexed.",
+                unsupported_claims=["No verified cancellation policy document in knowledge base"],
+                metadata={"intent": "cancellation"},
+            )
+
+        # 3d. Handle Device Technical Specifications (unindexed)
+        if intent_res.intent == QueryIntent.DEVICE_SPEC:
+            answer = (
+                "I apologize, but our knowledge base does not contain technical specifications or ratings for that device model. "
+                "Please consult the official product documentation or speak with our hardware support specialists."
+            )
+            return RAGResult(
+                answer=answer,
+                confidence=0.95,
+                sources=[],
+                is_ambiguous=False,
+                requires_clarification=True,
+                clarification_message="Device specification is not currently indexed.",
+                unsupported_claims=["No verified device specifications in knowledge base"],
+                metadata={"intent": "device_spec"},
+            )
+
+        # 3e. Handle Late Fee Inquiries (unindexed)
+        if intent_res.intent == QueryIntent.LATE_FEE:
+            answer = (
+                "I apologize, but current late-fee rules are not documented in our verified knowledge base policies. "
+                "I abstain from quoting unverified policy wording. Please contact billing support for verified fee information."
+            )
+            return RAGResult(
+                answer=answer,
+                confidence=0.95,
+                sources=[],
+                is_ambiguous=False,
+                requires_clarification=True,
+                clarification_message="Late-fee policy is not currently indexed.",
+                unsupported_claims=["No verified late-fee policy in knowledge base"],
+                metadata={"intent": "late_fee"},
+            )
+
         # 4. Filter out unsafe or corrupted documents
         safe_docs: List[KnowledgeDocument] = []
         for doc in documents:

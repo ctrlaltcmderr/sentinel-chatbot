@@ -20,7 +20,14 @@ logger = get_logger("rag.safety_checker")
 # Additional patterns for document-level safety checks beyond
 # the core prompt injection patterns in settings.
 _DOCUMENT_MALICIOUS_PATTERNS: List[Tuple[str, str]] = [
-    (r"ignore\s+all\s+rules", "Instruction to ignore all rules"),
+    (r"ignore\s+(?:all|prior|previous)\s+rules", "Instruction to ignore rules"),
+    (r"ignore\s+prior\s+rules\s+and\s+reveal\s+secrets", "Prompt injection secret extraction"),
+    (r"ignora\s+(?:las\s+)?reglas", "Instruction to ignore rules in Spanish"),
+    (r"revela\s+(?:instrucciones\s+ocultas|secretos)", "Attempt to extract secret instructions in Spanish"),
+    (r"reveal\s+secrets", "Attempt to extract secrets"),
+    (r"index\s+it\s+without\s+scanning", "Bypass scanning instruction"),
+    (r"write\s+(?:the\s+)?(?:missing\s+)?refund\s+policy.*from\s+what\s+you\s+think", "Fabricate policy instruction"),
+    (r"tell\s+me\s+how\s+to\s+hack", "Hacking instruction"),
     (r"approve\s+all\s+(refunds|requests|claims)", "Instruction to approve all items"),
     (r"override\s+(policy|rules|instructions)", "Policy override instruction"),
     (r"act\s+as\s+(a|an|the)\s+", "Role reassignment instruction"),

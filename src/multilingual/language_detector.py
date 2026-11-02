@@ -23,11 +23,12 @@ logger = get_logger("language_detector")
 # High-frequency words for each language (lowercased)
 _SPANISH_KEYWORDS: Set[str] = {
     "hola", "gracias", "por", "favor", "necesito", "quiero", "tengo",
-    "problema", "ayuda", "buenos", "días", "tardes", "noches",
-    "cómo", "dónde", "cuándo", "está", "estoy", "puede", "puedo",
-    "pedido", "orden", "cuenta", "pago", "envío", "producto",
-    "servicio", "cliente", "número", "dirección", "cambiar",
-    "devolver", "reembolso", "cancelar", "solicitar", "soporte",
+    "problema", "ayuda", "ayudar", "ayudarme", "buenos", "días", "tardes", "noches",
+    "cómo", "dónde", "cuándo", "está", "estoy", "puede", "puedo", "puedes",
+    "pedido", "orden", "cuenta", "pago", "envío", "producto", "factura", "facturas",
+    "servicio", "cliente", "número", "dirección", "cambiar", "buscar", "encontrar",
+    "devolver", "reembolso", "cancelar", "solicitar", "soporte", "frustrado",
+    "ignora", "reglas", "revela", "instrucciones", "ocultas", "bloqueada",
     "mi", "su", "el", "la", "los", "las", "un", "una", "que", "es",
     "no", "sí", "con", "para", "pero", "muy", "más", "también",
     "bien", "mal", "mejor", "peor", "otro", "otra", "mismo",
@@ -36,7 +37,7 @@ _SPANISH_KEYWORDS: Set[str] = {
 
 _FRENCH_KEYWORDS: Set[str] = {
     "bonjour", "merci", "s'il", "vous", "plaît", "je", "mon", "ma",
-    "problème", "aide", "besoin", "commande", "compte", "paiement",
+    "problème", "aide", "aider", "besoin", "commande", "compte", "paiement",
     "livraison", "produit", "service", "client", "numéro", "adresse",
     "changer", "retourner", "remboursement", "annuler", "demander",
     "bonsoir", "salut", "oui", "non", "avec", "pour", "mais",
@@ -45,6 +46,7 @@ _FRENCH_KEYWORDS: Set[str] = {
     "dans", "sur", "par", "est", "suis", "sont", "avoir", "être",
     "nous", "ils", "elles", "comment", "où", "quand", "pourquoi",
     "quel", "quelle", "ne", "pas", "rien", "tout", "jour",
+    "répondez", "répondre", "français", "trouver", "facture", "mécontent",
 }
 
 _HINDI_TRANSLITERATED_KEYWORDS: Set[str] = {
@@ -88,6 +90,10 @@ _ENGLISH_KEYWORDS: Set[str] = {
     "great", "another", "delayed", "package", "wonderful", "customer",
     "as", "always", "never", "item", "broken", "working", "bad",
     "fine", "time", "day", "days", "received", "arrived", "shipping",
+    "quote", "rule", "rules", "current", "latest", "fee", "fees", "late",
+    "total", "date", "image", "file", "receipt", "scan", "check", "still",
+    "tell", "show", "open", "close", "read", "say", "said", "write",
+    "search", "faq", "memo", "article", "guide", "setup", "ticket",
 }
 
 # Spanish-specific diacritical characters (beyond French overlap)

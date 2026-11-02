@@ -9,6 +9,7 @@ and business hours rules.
 from __future__ import annotations
 
 from datetime import datetime
+import re
 from typing import Optional
 
 from src.core.config.settings import get_settings, Settings
@@ -73,6 +74,11 @@ class EscalationManager:
         if record:
             return record
 
+        # ── Explicit Customer Request for Human Handoff / Ticket ──
+        record = self._check_customer_request(context, sentiment, now, is_bh)
+        if record:
+            return record
+
         # ── Conditions C/D: After-hours routing ──
         record = self._check_after_hours(context, sentiment, now, is_bh)
         if record:
@@ -122,6 +128,41 @@ class EscalationManager:
             "HIGH-RISK escalation triggered: %s", sentiment.high_risk_triggers
         )
         return record
+
+    def _check_customer_request(
+        self,
+        context: ConversationContext,
+        sentiment: SentimentResult,
+        now: datetime,
+        is_bh: bool,
+    ) -> Optional[EscalationRecord]:
+        """Customer explicitly requests a human agent or support ticket."""
+        if not context.messages:
+            return None
+        last_msg = context.messages[-1].content.lower()
+        patterns = [
+            r"\b(?:connect|transfer|speak|talk)\s+(?:me\s+)?(?:with|to)\s+(?:a\s+)?(?:person|human|agent|representative|specialist|operator)\b",
+            r"\b(?:speak|talk)\s+to\s+(?:someone|somebody|a\s+human|an\s+agent)\b",
+            r"\b(?:need|want)\s+(?:a\s+)?(?:person|human|human\s+agent|real\s+person)\b",
+            r"\b(?:open|create|submit)\s+(?:a\s+)?ticket\b",
+            r"\bescalat(?:e|ion)\s+to\s+(?:a\s+)?(?:human|person|agent|team)\b",
+        ]
+        if any(re.search(pat, last_msg) for pat in patterns):
+            queue_type = "standard" if is_bh else "on_call"
+            summary = self._build_summary(context)
+            record = EscalationRecord(
+                session_id=context.session_id,
+                reason=EscalationReason.CUSTOMER_REQUEST,
+                activated_condition="Customer explicitly requested human agent handoff or ticket creation",
+                conversation_summary=summary,
+                sentiment_at_escalation=sentiment,
+                priority=Priority.HIGH,
+                timestamp=now,
+                queue_type=queue_type,
+            )
+            logger.info("Customer requested human escalation / ticket creation.")
+            return record
+        return None
 
     def _check_consecutive_negative(
         self,

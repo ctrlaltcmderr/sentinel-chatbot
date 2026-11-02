@@ -60,7 +60,7 @@ _TYPO_DICT: Dict[str, str] = {
 
 # Clarification templates per language
 _CLARIFICATION_MESSAGES: Dict[str, str] = {
-    "en": "I'm not quite sure I understood that correctly. Could you please rephrase or provide more details?",
+    "en": "I'm not quite sure I understood that correctly. Could you please rephrase or provide more details so I can help assist you?",
     "es": "No estoy seguro de haber entendido correctamente. ¿Podría reformular su solicitud o proporcionar más detalles?",
     "fr": "Je ne suis pas certain d'avoir bien compris. Pourriez-vous reformuler ou préciser votre demande ?",
     "hi": "मुझे आपकी बात पूरी तरह समझ नहीं आई। क्या आप कृपया इसे दोबारा या अधिक विस्तार से बता सकते हैं?",

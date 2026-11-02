@@ -216,7 +216,7 @@ class DocumentStore:
         """Tokenize text into lowercase terms, removing stopwords."""
         # Simple tokenization: lowercase, split on non-alphanumeric
         tokens = re.findall(r"[a-z0-9]+", text.lower())
-        # Remove common stopwords
+        # Comprehensive stopwords list: common auxiliaries, question words, pronouns, filler words
         stopwords = {
             "the", "a", "an", "is", "are", "was", "were", "be", "been",
             "being", "have", "has", "had", "do", "does", "did", "will",
@@ -225,6 +225,11 @@ class DocumentStore:
             "from", "as", "into", "through", "during", "before", "after",
             "above", "below", "between", "and", "but", "or", "not", "no",
             "this", "that", "these", "those", "it", "its",
+            "what", "which", "who", "whom", "whose", "where", "when", "why", "how",
+            "i", "me", "my", "myself", "we", "our", "ours", "you", "your", "yours",
+            "he", "him", "his", "she", "her", "hers", "they", "them", "their", "theirs",
+            "please", "tell", "show", "give", "quote", "say", "said", "ask", "asking",
+            "want", "need", "know", "see", "get", "let", "just", "also", "about",
         }
         return [t for t in tokens if t not in stopwords and len(t) > 1]
 
@@ -271,6 +276,16 @@ class DocumentStore:
 
         total_docs = max(len(self._documents), 1)
         scores: Dict[str, float] = defaultdict(float)
+        doc_matched_tokens: Dict[str, Set[str]] = defaultdict(set)
+
+        generic_kb_terms = {
+            "policy", "policies", "rule", "rules", "guide", "guidelines",
+            "document", "documents", "article", "articles", "information",
+            "info", "support", "help", "faq", "faqs", "current", "latest",
+            "apply", "applies", "applied", "thing", "one", "another",
+            "answer", "questions", "details", "terms",
+        }
+        substantive_tokens = [t for t in query_tokens if t not in generic_kb_terms]
 
         for token in query_tokens:
             tokens_to_check = [(token, 1.0)]
@@ -292,6 +307,7 @@ class DocumentStore:
                         # Normalized TF
                         normalized_tf = tf / doc_len
                         scores[doc_id] += normalized_tf * idf
+                        doc_matched_tokens[doc_id].add(token)
 
                         # Boost score if token appears in title or product name
                         doc = self._documents.get(doc_id)
@@ -302,10 +318,16 @@ class DocumentStore:
                                 scores[doc_id] += 0.2 * idf
 
         # Only return candidates that genuinely matched query tokens with positive score
+        # If the query had substantive non-generic terms, the document MUST match at least one substantive token
         result = []
         for doc_id in candidate_ids:
             score = scores.get(doc_id, 0.0)
             if score > 0.0:
+                if substantive_tokens:
+                    matched = doc_matched_tokens.get(doc_id, set())
+                    if not any(st in matched for st in substantive_tokens):
+                        # Matched only generic terms (e.g. 'policy' or 'support') without substantive topic match
+                        continue
                 result.append((doc_id, score))
 
         return result

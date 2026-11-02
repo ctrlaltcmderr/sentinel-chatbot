@@ -31,6 +31,10 @@ class QueryIntent(str, Enum):
     ACCOUNT_SECURITY = "account_security"
     PAYMENT_SECURITY = "payment_security"
     BILLING = "billing"
+    CANCELLATION = "cancellation"
+    DEVICE_SPEC = "device_spec"
+    LATE_FEE = "late_fee"
+    KB_INVENTORY = "kb_inventory"
     GENERAL_POLICY = "general_policy"
     OUT_OF_SCOPE = "out_of_scope"
 
@@ -123,6 +127,32 @@ _BILLING_PATTERNS = [
     r"\bsettlement\s+playbook\b",
 ]
 
+_KB_INVENTORY_PATTERNS = [
+    r"\bwhich\s+documents\s+(?:can\s+you|do\s+you)\s+answer\b",
+    r"\bwhat\s+documents\s+(?:can\s+you|are\s+in|do\s+you)\b",
+    r"\bwhat\s+(?:knowledge\s+base|sources|policies)\s+(?:can\s+you|are\s+indexed|do\s+you\s+have)\b",
+    r"\bwhat\s+can\s+you\s+answer\s+questions\s+from\b",
+    r"\bwhich\s+policies\s+do\s+you\s+have\b",
+]
+
+_CANCELLATION_PATTERNS = [
+    r"\bcancell?ation\b",
+    r"\bcancel\s+(?:my\s+)?(?:order|subscription|account|service|policy|item)\b",
+    r"\bhow\s+to\s+cancel\b",
+    r"\bcancel\s+rule\b",
+]
+
+_DEVICE_SPEC_PATTERNS = [
+    r"\b(?:underwater|waterproof|water-resistant|water\s+damage|ip6[78]|battery\s+life|ram|specs|specifications)\b",
+    r"\bx[1234]\s+device\b",
+]
+
+_LATE_FEE_PATTERNS = [
+    r"\blate[\s-]fee\b",
+    r"\bpenalty\s+fee\b",
+    r"\boverdue\s+fee\b",
+]
+
 # Order ID extraction pattern (e.g., ORD-12345, ORD-998877, Order #12345)
 _ORDER_ID_PATTERN = re.compile(
     r"\b(?:ORD-|ORDER-|#)?([A-Za-z]{3,4}-[0-9A-Za-z]{3,10}|ORD[0-9]{4,10})\b|\bORD-([A-Za-z0-9-]+)\b",
@@ -210,6 +240,42 @@ def classify_query_intent(query: str, context: Optional[Dict[str, Any]] = None) 
                 keywords={"invoice", "billing", "payment", "charge"},
             )
 
+    # 5b. Knowledge Base Inventory Query
+    for pattern in _KB_INVENTORY_PATTERNS:
+        if re.search(pattern, q_lower):
+            return QueryIntentResult(
+                intent=QueryIntent.KB_INVENTORY,
+                confidence=0.95,
+                keywords={"documents", "sources", "policies", "knowledge"},
+            )
+
+    # 5c. Cancellation Queries (unindexed in public KB)
+    for pattern in _CANCELLATION_PATTERNS:
+        if re.search(pattern, q_lower):
+            return QueryIntentResult(
+                intent=QueryIntent.CANCELLATION,
+                confidence=0.95,
+                keywords={"cancellation", "cancel", "policy"},
+            )
+
+    # 5d. Device Technical Specifications (unindexed in public KB)
+    for pattern in _DEVICE_SPEC_PATTERNS:
+        if re.search(pattern, q_lower):
+            return QueryIntentResult(
+                intent=QueryIntent.DEVICE_SPEC,
+                confidence=0.95,
+                keywords={"device", "underwater", "specifications"},
+            )
+
+    # 5e. Late Fee Inquiries (unindexed in public KB)
+    for pattern in _LATE_FEE_PATTERNS:
+        if re.search(pattern, q_lower):
+            return QueryIntentResult(
+                intent=QueryIntent.LATE_FEE,
+                confidence=0.95,
+                keywords={"late", "fee", "penalty"},
+            )
+
     # 6. Order Tracking Queries
     for pattern in _ORDER_TRACKING_PATTERNS:
         if re.search(pattern, q_lower):
@@ -271,10 +337,7 @@ def is_document_relevant_to_intent(doc: KnowledgeDocument, intent: QueryIntent) 
     Strictly prevents cross-domain pollution (e.g. warranty documents returned for refund or order queries).
     """
     # Order tracking should NEVER match static legal policies
-    if intent == QueryIntent.ORDER_TRACKING:
-        return False
-
-    if intent == QueryIntent.OUT_OF_SCOPE:
+    if intent in (QueryIntent.ORDER_TRACKING, QueryIntent.OUT_OF_SCOPE, QueryIntent.KB_INVENTORY, QueryIntent.CANCELLATION, QueryIntent.DEVICE_SPEC, QueryIntent.LATE_FEE):
         return False
 
     title_lower = doc.title.lower()
