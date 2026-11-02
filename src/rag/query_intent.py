@@ -121,11 +121,19 @@ def extract_order_id(text: str) -> Optional[str]:
         return match.group(1).upper()
 
     # Look for "order #12345" or "order number 12345" or "order 12345"
-    match2 = re.search(r"\border\s*(?:#|id|number|no\.?)?[:\s]*([A-Za-z0-9-]{4,12})\b", text, re.IGNORECASE)
+    match2 = re.search(r"\border\s*(?:#|id|number|no\.?)?[:\s]*#?([A-Za-z0-9-]{4,12})\b", text, re.IGNORECASE)
     if match2:
         candidate = match2.group(1).strip()
-        # Avoid matching words like "yesterday", "status", "tracking"
-        if candidate.lower() not in {"yesterday", "status", "today", "tomorrow", "tracking", "delayed", "late", "details"}:
+        # Must contain digits or start with ord
+        if not re.search(r"\d", candidate) and not candidate.lower().startswith("ord"):
+            return None
+        stopwords_avoid = {
+            "yesterday", "status", "today", "tomorrow", "tracking", "delayed", "late",
+            "details", "reference", "number", "update", "online", "retail", "package",
+            "delivery", "shipment", "items", "issue", "history", "support", "cancel",
+            "warranty", "refund", "return", "policy", "laptop", "product",
+        }
+        if candidate.lower() not in stopwords_avoid:
             return candidate.upper() if candidate.startswith("ord") else f"ORD-{candidate.upper()}"
 
     return None
@@ -134,25 +142,49 @@ def extract_order_id(text: str) -> Optional[str]:
 def classify_query_intent(query: str, context: Optional[Dict[str, Any]] = None) -> QueryIntentResult:
     """
     Classify the query intent and extract domain entities.
+    Checks specific policy intents (Warranty, Refund, Security, Billing) and
+    transactional intents (Order Tracking) accurately.
     """
     q_lower = query.lower().strip()
     order_id = extract_order_id(query)
 
-    # If context has a tracked order_id and none in current query
-    if not order_id and context and "order_id" in context:
-        order_id = context["order_id"]
+    # 1. Warranty Queries
+    for pattern in _WARRANTY_PATTERNS:
+        if re.search(pattern, q_lower):
+            return QueryIntentResult(
+                intent=QueryIntent.WARRANTY,
+                confidence=0.95,
+                keywords={"warranty", "hardware", "coverage", "repair", "defect"},
+            )
 
-    # If user provides an Order ID (e.g. "ORD-998877", "My order is ORD-998877")
-    if order_id and any(w in q_lower for w in ["order", "ord", "package", "delivery", "track", "check", "my", "status", "where", "here", "is"]):
-        return QueryIntentResult(
-            intent=QueryIntent.ORDER_TRACKING,
-            confidence=0.95,
-            order_id=order_id,
-            missing_info=[],
-            keywords={"order", "tracking", "delivery"},
-        )
+    # 2. Return & Refund Queries
+    for pattern in _RETURN_REFUND_PATTERNS:
+        if re.search(pattern, q_lower):
+            return QueryIntentResult(
+                intent=QueryIntent.RETURN_REFUND,
+                confidence=0.95,
+                keywords={"return", "refund", "money", "packaging", "policy"},
+            )
 
-    # 1. Order tracking detection
+    # 3. Account Security Queries
+    for pattern in _SECURITY_PATTERNS:
+        if re.search(pattern, q_lower):
+            return QueryIntentResult(
+                intent=QueryIntent.ACCOUNT_SECURITY,
+                confidence=0.95,
+                keywords={"security", "compromise", "unauthorized", "protocol"},
+            )
+
+    # 4. Billing & Invoices
+    for pattern in _BILLING_PATTERNS:
+        if re.search(pattern, q_lower):
+            return QueryIntentResult(
+                intent=QueryIntent.BILLING,
+                confidence=0.90,
+                keywords={"invoice", "billing", "payment", "charge"},
+            )
+
+    # 5. Order Tracking Queries
     for pattern in _ORDER_TRACKING_PATTERNS:
         if re.search(pattern, q_lower):
             missing = [] if order_id else ["order_id"]
@@ -163,6 +195,16 @@ def classify_query_intent(query: str, context: Optional[Dict[str, Any]] = None) 
                 missing_info=missing,
                 keywords={"order", "tracking", "delivery", "shipping", "status"},
             )
+
+    # If query provided an order ID with an order-related word
+    if order_id and any(w in q_lower for w in ["order", "ord", "package", "delivery", "track", "shipment", "parcel"]):
+        return QueryIntentResult(
+            intent=QueryIntent.ORDER_TRACKING,
+            confidence=0.95,
+            order_id=order_id,
+            missing_info=[],
+            keywords={"order", "tracking", "delivery"},
+        )
 
     # If query mentions "order" combined with tracking/delivery keywords
     if "order" in q_lower and any(w in q_lower for w in ["where", "track", "status", "arrive", "shipped", "delivery", "parcel", "package", "yesterday", "late", "when"]):
@@ -175,43 +217,6 @@ def classify_query_intent(query: str, context: Optional[Dict[str, Any]] = None) 
             keywords={"order", "tracking", "delivery"},
         )
 
-
-    # 2. Account Security
-    for pattern in _SECURITY_PATTERNS:
-        if re.search(pattern, q_lower):
-            return QueryIntentResult(
-                intent=QueryIntent.ACCOUNT_SECURITY,
-                confidence=0.95,
-                keywords={"security", "compromise", "unauthorized", "protocol"},
-            )
-
-    # 3. Warranty
-    for pattern in _WARRANTY_PATTERNS:
-        if re.search(pattern, q_lower):
-            return QueryIntentResult(
-                intent=QueryIntent.WARRANTY,
-                confidence=0.95,
-                keywords={"warranty", "hardware", "coverage", "repair", "defect"},
-            )
-
-    # 4. Return & Refund
-    for pattern in _RETURN_REFUND_PATTERNS:
-        if re.search(pattern, q_lower):
-            return QueryIntentResult(
-                intent=QueryIntent.RETURN_REFUND,
-                confidence=0.95,
-                keywords={"return", "refund", "money", "packaging", "policy"},
-            )
-
-    # 5. Billing & Invoices
-    for pattern in _BILLING_PATTERNS:
-        if re.search(pattern, q_lower):
-            return QueryIntentResult(
-                intent=QueryIntent.BILLING,
-                confidence=0.90,
-                keywords={"invoice", "billing", "payment", "charge"},
-            )
-
     # 6. Default to general policy
     return QueryIntentResult(
         intent=QueryIntent.GENERAL_POLICY,
@@ -219,6 +224,7 @@ def classify_query_intent(query: str, context: Optional[Dict[str, Any]] = None) 
         order_id=order_id,
         keywords=set(re.findall(r"\b[a-z]{3,}\b", q_lower)),
     )
+
 
 
 def is_document_relevant_to_intent(doc: KnowledgeDocument, intent: QueryIntent) -> bool:
