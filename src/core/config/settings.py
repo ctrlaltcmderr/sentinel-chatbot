@@ -108,10 +108,11 @@ class SentimentConfig:
     escalation_negative_count: int = 3
     unresolved_escalation_minutes: int = 15
     high_risk_keywords: List[str] = field(default_factory=lambda: [
-        "account compromise", "hacked", "unauthorized access",
-        "duplicate payment", "double charged", "legal action",
-        "lawyer", "lawsuit", "sue", "court", "attorney",
-        "fraud", "stolen", "identity theft"
+        "account compromise", "hacked", "unauthorized access", "accessed my account",
+        "without permission", "unauthorized payment", "unauthorized charge",
+        "unauthorized transaction", "duplicate payment", "double charged",
+        "charged twice", "legal action", "lawyer", "lawsuit", "sue", "court",
+        "attorney", "fraud", "stolen", "identity theft", "account takeover"
     ])
     sarcasm_indicators: List[str] = field(default_factory=lambda: [
         "oh great", "wonderful", "fantastic", "brilliant",

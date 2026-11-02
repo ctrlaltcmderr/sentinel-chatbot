@@ -27,6 +27,8 @@ _SEVERITY_KEYWORDS = {
     "critical": [
         "account compromise", "hacked", "unauthorized access", "fraud",
         "stolen", "identity theft", "data breach", "security breach",
+        "without permission", "accessed my account", "unauthorized payment",
+        "unauthorized charge",
     ],
     "high": [
         "double charged", "duplicate payment", "legal action", "lawyer",

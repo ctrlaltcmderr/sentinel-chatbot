@@ -29,6 +29,7 @@ class QueryIntent(str, Enum):
     WARRANTY = "warranty"
     RETURN_REFUND = "return_refund"
     ACCOUNT_SECURITY = "account_security"
+    PAYMENT_SECURITY = "payment_security"
     BILLING = "billing"
     GENERAL_POLICY = "general_policy"
     OUT_OF_SCOPE = "out_of_scope"
@@ -88,13 +89,29 @@ _RETURN_REFUND_PATTERNS = [
 
 
 _SECURITY_PATTERNS = [
+    r"\baccess(ed)?\s+(?:my\s+|the\s+)?account\s+without\s+(?:my\s+)?permission\b",
+    r"\bwithout\s+(?:my\s+)?permission\b",
     r"\bunauthorized\s+access\b",
-    r"\bcompromise(d)?\b",
+    r"\b(?:someone|somebody|anyone)\s+(?:else\s+)?(?:accessed|logged(?:\s+in(?:to)?)?|hacked|used)\s+(?:my\s+)?account\b",
+    r"\baccount\s+(?:was\s+|is\s+|got\s+)?compromise(d)?\b",
+    r"\bcompromised\s+account\b",
     r"\bhack(ed)?\b",
     r"\bsecurity\s+protocol\b",
-    r"\bsuspicious\s+(login|activity|transaction)\b",
+    r"\baccount\s+security\b",
+    r"\bsuspicious\s+(login|activity)\b",
+    r"\bunrecognized\s+login\b",
     r"\baccount\s+takeover\b",
-    r"\bstolen\s+credentials\b",
+    r"\bstolen\s+(credentials|password|login)\b",
+    r"\bsecurity\s+breach\b",
+]
+
+_PAYMENT_SECURITY_PATTERNS = [
+    r"\bunauthorized\s+(payment|charge|transaction|withdrawal|debit|purchase)\b",
+    r"\b(?:didn't|did\s+not|never)\s+authorize\s+(?:this|the|a)\s+(payment|charge|transaction|purchase)\b",
+    r"\bfraud(ulent)?\s+(payment|charge|transaction|activity)\b",
+    r"\bstolen\s+(card|credit\s+card|debit\s+card)\b",
+    r"\bcard\s+(was\s+)?stolen\b",
+    r"\bsomeone\s+(used|charged)\s+my\s+(card|credit\s+card|account)\b",
 ]
 
 _BILLING_PATTERNS = [
@@ -148,7 +165,25 @@ def classify_query_intent(query: str, context: Optional[Dict[str, Any]] = None) 
     q_lower = query.lower().strip()
     order_id = extract_order_id(query)
 
-    # 1. Warranty Queries
+    # 1. Critical Account Security Queries
+    for pattern in _SECURITY_PATTERNS:
+        if re.search(pattern, q_lower):
+            return QueryIntentResult(
+                intent=QueryIntent.ACCOUNT_SECURITY,
+                confidence=0.95,
+                keywords={"security", "compromise", "unauthorized", "permission", "account"},
+            )
+
+    # 2. Payment Security & Fraud Queries
+    for pattern in _PAYMENT_SECURITY_PATTERNS:
+        if re.search(pattern, q_lower):
+            return QueryIntentResult(
+                intent=QueryIntent.PAYMENT_SECURITY,
+                confidence=0.95,
+                keywords={"fraud", "unauthorized", "payment", "charge", "security"},
+            )
+
+    # 3. Warranty Queries
     for pattern in _WARRANTY_PATTERNS:
         if re.search(pattern, q_lower):
             return QueryIntentResult(
@@ -157,7 +192,7 @@ def classify_query_intent(query: str, context: Optional[Dict[str, Any]] = None) 
                 keywords={"warranty", "hardware", "coverage", "repair", "defect"},
             )
 
-    # 2. Return & Refund Queries
+    # 4. Return & Refund Queries
     for pattern in _RETURN_REFUND_PATTERNS:
         if re.search(pattern, q_lower):
             return QueryIntentResult(
@@ -166,16 +201,7 @@ def classify_query_intent(query: str, context: Optional[Dict[str, Any]] = None) 
                 keywords={"return", "refund", "money", "packaging", "policy"},
             )
 
-    # 3. Account Security Queries
-    for pattern in _SECURITY_PATTERNS:
-        if re.search(pattern, q_lower):
-            return QueryIntentResult(
-                intent=QueryIntent.ACCOUNT_SECURITY,
-                confidence=0.95,
-                keywords={"security", "compromise", "unauthorized", "protocol"},
-            )
-
-    # 4. Billing & Invoices
+    # 5. Billing & Invoices
     for pattern in _BILLING_PATTERNS:
         if re.search(pattern, q_lower):
             return QueryIntentResult(
@@ -184,7 +210,7 @@ def classify_query_intent(query: str, context: Optional[Dict[str, Any]] = None) 
                 keywords={"invoice", "billing", "payment", "charge"},
             )
 
-    # 5. Order Tracking Queries
+    # 6. Order Tracking Queries
     for pattern in _ORDER_TRACKING_PATTERNS:
         if re.search(pattern, q_lower):
             missing = [] if order_id else ["order_id"]
@@ -217,7 +243,19 @@ def classify_query_intent(query: str, context: Optional[Dict[str, Any]] = None) 
             keywords={"order", "tracking", "delivery"},
         )
 
-    # 6. Default to general policy
+    # 7. Out of scope detection
+    out_of_scope_patterns = [
+        r"\b(?:recipe|cake|chocolate|weather|cook|bake|football|cricket|joke|song|movie)\b",
+    ]
+    for pattern in out_of_scope_patterns:
+        if re.search(pattern, q_lower):
+            return QueryIntentResult(
+                intent=QueryIntent.OUT_OF_SCOPE,
+                confidence=0.95,
+                keywords=set(re.findall(r"\b[a-z]{3,}\b", q_lower)),
+            )
+
+    # 8. Default to general policy
     return QueryIntentResult(
         intent=QueryIntent.GENERAL_POLICY,
         confidence=0.50,
@@ -236,9 +274,12 @@ def is_document_relevant_to_intent(doc: KnowledgeDocument, intent: QueryIntent) 
     if intent == QueryIntent.ORDER_TRACKING:
         return False
 
+    if intent == QueryIntent.OUT_OF_SCOPE:
+        return False
+
     title_lower = doc.title.lower()
     content_lower = doc.content.lower()
-    tags_lower = " ".join(doc.tags).lower()
+    tags_lower = " ".join(doc.tags).lower() if hasattr(doc, "tags") and doc.tags else ""
     doc_text = f"{title_lower} {content_lower} {tags_lower}"
 
     if intent == QueryIntent.WARRANTY:
@@ -247,18 +288,29 @@ def is_document_relevant_to_intent(doc: KnowledgeDocument, intent: QueryIntent) 
 
     if intent == QueryIntent.RETURN_REFUND:
         refund_terms = ["return", "refund", "money back", "reimbursement", "packaging", "30 days", "non-refundable"]
-        # Must have refund/return terms AND not be solely a warranty document
+        # Must have refund/return terms AND not be solely a warranty or security document
         has_refund = any(term in doc_text for term in refund_terms)
         is_pure_warranty = "warranty" in title_lower and not ("return" in title_lower or "refund" in title_lower)
-        return has_refund and not is_pure_warranty
+        is_security = "security" in title_lower or "compromise" in title_lower
+        return has_refund and not is_pure_warranty and not is_security
 
     if intent == QueryIntent.ACCOUNT_SECURITY:
-        security_terms = ["security", "compromise", "unauthorized", "protocol", "audit", "password", "session"]
+        if "warranty" in title_lower or "return" in title_lower:
+            return False
+        security_terms = ["security", "compromise", "unauthorized", "protocol", "audit", "password", "session", "access"]
         return any(term in doc_text for term in security_terms)
 
+    if intent == QueryIntent.PAYMENT_SECURITY:
+        if "warranty" in title_lower or ("return" in title_lower and "fraud" not in doc_text):
+            return False
+        fraud_terms = ["fraud", "unauthorized payment", "unauthorized charge", "payment security", "fraudulent", "stolen card"]
+        return any(term in doc_text for term in fraud_terms) or "security" in title_lower
+
     if intent == QueryIntent.BILLING:
+        if "warranty" in title_lower:
+            return False
         billing_terms = ["billing", "payment", "invoice", "charge", "settlement", "fee", "cost"]
         return any(term in doc_text for term in billing_terms)
 
-    # General policy queries: accept if not conflicting
+    # General policy queries: accept if not conflicting with domain terms
     return True

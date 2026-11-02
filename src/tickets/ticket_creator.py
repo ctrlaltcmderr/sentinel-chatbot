@@ -44,6 +44,9 @@ _CATEGORY_KEYWORDS: Dict[str, List[str]] = {
         "hack", "hacked", "compromised", "unauthorized", "password",
         "login", "locked out", "two-factor", "2fa", "suspicious",
         "identity theft", "fraud", "stolen", "phishing",
+        "without permission", "accessed my account", "unauthorized access",
+        "unauthorized payment", "unauthorized charge", "security breach",
+        "account takeover",
     ],
     "shipping": [
         "delivery", "shipped", "shipping", "tracking", "lost package",
@@ -258,6 +261,9 @@ class TicketCreator:
                 scores[category] = score
 
         if scores:
+            # Security incidents (account compromise, fraud, unauthorized access) take precedence
+            if scores.get("account_security", 0) > 0 and scores["account_security"] >= max(scores.values()) - 1:
+                return "account_security"
             return max(scores, key=scores.get)
         return "general"
 

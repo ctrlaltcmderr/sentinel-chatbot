@@ -39,6 +39,8 @@ class MessageResponse(BaseModel):
     sentiment: str
     confidence: float
     is_high_risk: bool
+    risk_category: Optional[str] = None
+    risk_level: Optional[str] = "none"
     escalated: bool
     escalation_reason: Optional[str] = None
     ticket_id: Optional[str] = None
@@ -57,6 +59,8 @@ class ConversationOut(BaseModel):
     last_sentiment: str
     last_confidence: float
     is_high_risk: bool
+    risk_category: Optional[str] = None
+    risk_level: Optional[str] = "none"
     escalated: bool
     escalation_reason: Optional[str] = None
     language: str

@@ -29,6 +29,10 @@ export interface ChatMessage {
   sentiment?: SentimentType;
   confidence?: number;
   is_high_risk: boolean;
+  risk_category?: string;
+  risk_level?: string;
+  ticket_id?: string;
+  assigned_team?: string;
   escalated: boolean;
   escalation_reason?: string;
   sources?: any[];
@@ -44,6 +48,10 @@ export interface Conversation {
   last_sentiment: SentimentType;
   last_confidence: number;
   is_high_risk: boolean;
+  risk_category?: string;
+  risk_level?: string;
+  ticket_id?: string;
+  assigned_team?: string;
   escalated: boolean;
   escalation_reason?: string;
   language: string;

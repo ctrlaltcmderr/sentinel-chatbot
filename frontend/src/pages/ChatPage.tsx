@@ -172,7 +172,7 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
         setActiveSessionId(response.session_id);
       }
 
-      // Append bot response
+      // Append bot response and update customer message with analysis metadata
       const botMsg: ChatMessage = {
         id: Date.now() + 1,
         session_id: response.session_id,
@@ -180,15 +180,40 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
         content: response.reply,
         timestamp: response.timestamp || new Date().toISOString(),
         language: 'en',
-        sentiment: response.sentiment,
-        confidence: response.confidence,
+        sentiment: undefined, // Sentinel reply is objective/professional
         is_high_risk: response.is_high_risk,
+        risk_category: response.risk_category,
+        risk_level: response.risk_level,
         escalated: response.escalated,
         escalation_reason: response.escalation_reason,
+        ticket_id: response.ticket_id,
+        assigned_team: response.assigned_team,
         sources: response.sources || [],
       };
 
-      setMessages((prev) => [...prev, botMsg]);
+      setMessages((prev) => {
+        const updated = [...prev];
+        let lastUserIdx = -1;
+        for (let i = updated.length - 1; i >= 0; i--) {
+          if (updated[i].sender === 'customer') {
+            lastUserIdx = i;
+            break;
+          }
+        }
+        if (lastUserIdx !== -1) {
+          updated[lastUserIdx] = {
+            ...updated[lastUserIdx],
+            sentiment: response.sentiment,
+            confidence: response.confidence,
+            is_high_risk: response.is_high_risk,
+            risk_category: response.risk_category,
+            risk_level: response.risk_level,
+            escalated: response.escalated,
+            escalation_reason: response.escalation_reason,
+          };
+        }
+        return [...updated, botMsg];
+      });
       setSelectedFile(null);
       setUploadedFileInfo(null);
 
@@ -202,6 +227,13 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
   };
 
   const activeConv = conversations.find((c) => c.id === activeSessionId);
+  const latestCustomerMessage = [...messages].reverse().find((m) => m.sender === 'customer');
+  const latestBotMessage = [...messages].reverse().find((m) => m.sender === 'sentinel');
+  const activeTicketId = latestBotMessage?.ticket_id || activeConv?.ticket_id;
+  const activeTeam = latestBotMessage?.assigned_team || activeConv?.assigned_team;
+  const activeRiskCategory = latestCustomerMessage?.risk_category || latestBotMessage?.risk_category || activeConv?.risk_category;
+  const activeRiskLevel = latestCustomerMessage?.risk_level || latestBotMessage?.risk_level || activeConv?.risk_level || (activeConv?.is_high_risk ? 'critical' : 'none');
+  const activeSources = latestBotMessage?.sources || [];
   const latestMessage = messages.length > 0 ? messages[messages.length - 1] : null;
 
   const quickPrompts = [
@@ -478,8 +510,21 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
                     }`}
                   >
                     <span>{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    {isBot && m.sentiment && (
-                      <SentimentBadge sentiment={m.sentiment} confidence={m.confidence} isHighRisk={m.is_high_risk} size="sm" />
+                    {!isBot && m.sentiment && (
+                      <div className="flex items-center gap-1.5">
+                        <SentimentBadge sentiment={m.sentiment} confidence={m.confidence} isHighRisk={m.is_high_risk} size="sm" />
+                        {m.is_high_risk && (
+                          <span className="px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 font-bold uppercase text-[9px]">
+                            {m.risk_category ? m.risk_category.replace('_', ' ') : 'CRITICAL RISK'}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {isBot && m.ticket_id && (
+                      <span className="px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary font-medium flex items-center gap-1 text-[10px]">
+                        <TicketIcon className="w-2.5 h-2.5" />
+                        Ticket #{m.ticket_id.slice(0, 8)} • Team: {m.assigned_team?.toUpperCase() || 'GENERAL'}
+                      </span>
                     )}
                   </div>
                 </div>
@@ -590,38 +635,67 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
             </p>
           </div>
 
-          {/* Sentiment Status Card */}
+          {/* Customer Sentiment Card */}
           <div className="p-3.5 rounded-xl bg-card border border-border space-y-2.5">
             <span className="text-[11px] font-semibold text-muted-foreground block">
-              Sentiment Classification
+              Customer Message Sentiment
             </span>
             <div className="flex items-center justify-between">
               <SentimentBadge
-                sentiment={latestMessage?.sentiment || activeConv?.last_sentiment || 'neutral'}
-                confidence={latestMessage?.confidence ?? activeConv?.last_confidence ?? 1.0}
+                sentiment={latestCustomerMessage?.sentiment || activeConv?.last_sentiment || 'neutral'}
+                confidence={latestCustomerMessage?.confidence ?? activeConv?.last_confidence ?? 1.0}
               />
             </div>
-            <div className="text-[11px] text-muted-foreground">
-              Confidence score: {Math.round((latestMessage?.confidence ?? activeConv?.last_confidence ?? 1.0) * 100)}%
+            <div className="text-[11px] text-muted-foreground flex justify-between">
+              <span>Confidence:</span>
+              <span className="font-semibold text-foreground">
+                {Math.round((latestCustomerMessage?.confidence ?? activeConv?.last_confidence ?? 1.0) * 100)}%
+              </span>
             </div>
           </div>
 
-          {/* Risk & Escalation Card */}
+          {/* Risk Classification & Level Card */}
           <div className="p-3.5 rounded-xl bg-card border border-border space-y-2.5">
             <span className="text-[11px] font-semibold text-muted-foreground block">
-              Risk & Escalation Status
+              Risk & Safety Classification
             </span>
             <div className="space-y-1.5 text-xs">
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">High Risk Incident:</span>
+                <span className="text-muted-foreground">Risk Status:</span>
                 <span className={`font-semibold ${activeConv?.is_high_risk ? 'text-rose-500' : 'text-emerald-500'}`}>
-                  {activeConv?.is_high_risk ? 'YES (CRITICAL)' : 'NO (CLEAR)'}
+                  {activeConv?.is_high_risk ? 'HIGH RISK DETECTED' : 'CLEAR'}
                 </span>
               </div>
               <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Risk Level:</span>
+                <span className={`font-mono text-[11px] font-bold uppercase ${
+                  activeRiskLevel === 'critical' ? 'text-rose-600 dark:text-rose-400' :
+                  activeRiskLevel === 'high' ? 'text-orange-500' : 'text-muted-foreground'
+                }`}>
+                  {activeRiskLevel.toUpperCase()}
+                </span>
+              </div>
+              {activeRiskCategory && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Classification:</span>
+                  <span className="font-mono text-[11px] text-foreground font-semibold uppercase">
+                    {activeRiskCategory.replace('_', ' ')}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Escalation & Ticket Routing Card */}
+          <div className="p-3.5 rounded-xl bg-card border border-border space-y-2.5">
+            <span className="text-[11px] font-semibold text-muted-foreground block">
+              Escalation & Ticket Routing
+            </span>
+            <div className="space-y-1.5 text-xs">
+              <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Escalation Triggered:</span>
                 <span className={`font-semibold ${activeConv?.escalated ? 'text-orange-500' : 'text-slate-500'}`}>
-                  {activeConv?.escalated ? 'TRUE' : 'FALSE'}
+                  {activeConv?.escalated ? 'YES' : 'NO'}
                 </span>
               </div>
               {activeConv?.escalation_reason && (
@@ -632,26 +706,55 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
                   </span>
                 </div>
               )}
+              {activeTicketId && (
+                <div className="pt-1.5 border-t border-border/60 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Ticket ID:</span>
+                    <span className="font-mono text-[11px] text-primary font-bold">
+                      #{activeTicketId.slice(0, 8)}
+                    </span>
+                  </div>
+                  {activeTeam && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Assigned Team:</span>
+                      <span className="font-semibold text-foreground uppercase">
+                        {activeTeam.replace('_', ' ')}
+                      </span>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => onNavigateToTicket && onNavigateToTicket(activeTicketId)}
+                    className="w-full mt-2 flex items-center justify-center gap-1.5 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-semibold shadow-sm hover:opacity-90"
+                  >
+                    <TicketIcon className="w-3.5 h-3.5" />
+                    <span>View Support Ticket</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Associated Support Ticket if Escalated */}
-          {activeConv?.escalated && (
-            <div className="p-3.5 rounded-xl bg-primary/5 border border-primary/20 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-primary">Associated Ticket</span>
-                <span className="text-[10px] font-mono text-muted-foreground">Automated</span>
+          {/* Grounding Knowledge Sources */}
+          {activeSources.length > 0 && (
+            <div className="p-3.5 rounded-xl bg-card border border-border space-y-2 text-xs">
+              <span className="text-[11px] font-semibold text-muted-foreground block">
+                Verified Knowledge Sources
+              </span>
+              <div className="space-y-1.5">
+                {activeSources.map((src, i) => (
+                  <div key={i} className="p-2 rounded bg-muted/60 border border-border text-[11px] space-y-0.5">
+                    <div className="font-semibold text-foreground flex items-center gap-1">
+                      <ExternalLink className="w-3 h-3 text-primary shrink-0" />
+                      <span>{src.title || src.document_id}</span>
+                    </div>
+                    {src.version && (
+                      <div className="text-[10px] text-muted-foreground">
+                        Version {src.version} • {src.access_level?.toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
-              <p className="text-xs text-foreground font-medium">
-                Inquiry escalated to specialized support queue.
-              </p>
-              <button
-                onClick={() => onNavigateToTicket && onNavigateToTicket('')}
-                className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-semibold shadow-sm hover:opacity-90"
-              >
-                <TicketIcon className="w-3.5 h-3.5" />
-                <span>View Support Tickets</span>
-              </button>
             </div>
           )}
 
@@ -666,7 +769,7 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
               <div className="flex justify-between">
                 <span>Language:</span>
                 <span className="text-foreground font-medium uppercase">
-                  {latestMessage?.language || 'en'}
+                  {latestCustomerMessage?.language || 'en'}
                 </span>
               </div>
               <div className="flex justify-between">

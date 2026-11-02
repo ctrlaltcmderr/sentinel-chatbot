@@ -154,6 +154,35 @@ class AnswerGenerator:
             logger.info(
                 f"Documents found ({len(safe_docs)}) but none are relevant to intent '{intent_res.intent.value}'."
             )
+            if intent_res.intent == QueryIntent.ACCOUNT_SECURITY:
+                return RAGResult(
+                    answer=(
+                        "We take account security and unauthorized access very seriously. "
+                        "I do not have a public policy document for this specific question in the knowledge base, "
+                        "but our security protocols require immediately securing your account credentials. "
+                        "This inquiry has been prioritized for our Account Security team."
+                    ),
+                    confidence=0.90,
+                    sources=[],
+                    is_ambiguous=False,
+                    requires_clarification=False,
+                    unsupported_claims=["No verified public security policy document in knowledge base"],
+                    metadata={"reason": "unrelated_documents", "intent": "account_security"},
+                )
+            if intent_res.intent == QueryIntent.PAYMENT_SECURITY:
+                return RAGResult(
+                    answer=(
+                        "We treat unauthorized payments and fraudulent charges with the highest priority. "
+                        "I do not have a public policy document for this transaction in the knowledge base, "
+                        "but our billing and security specialists will investigate unauthorized activity and assist you."
+                    ),
+                    confidence=0.90,
+                    sources=[],
+                    is_ambiguous=False,
+                    requires_clarification=False,
+                    unsupported_claims=["No verified public payment security policy in knowledge base"],
+                    metadata={"reason": "unrelated_documents", "intent": "payment_security"},
+                )
             return RAGResult(
                 answer="I apologize, but I do not have enough verified information in the knowledge base to answer your question.",
                 confidence=0.0,
@@ -199,6 +228,13 @@ class AnswerGenerator:
             "what", "when", "where", "which", "does", "have", "with", "from",
             "your", "this", "that", "about", "could", "would", "should", "please",
             "tell", "can", "for", "the", "are", "you", "item", "product", "policy",
+            "someone", "somebody", "anyone", "permission", "noticed", "yesterday",
+            "supposed", "today", "tomorrow", "hello", "thank", "thanks", "regards",
+            "customer", "help", "need", "want", "like", "know", "there", "their",
+            "accessed", "access", "saw", "see", "seen", "payment", "paid", "charge",
+            "charged", "look", "looking", "check", "checked", "got", "get", "getting",
+            "make", "made", "sent", "send", "went", "come", "came", "been", "being",
+            "also", "just", "into", "onto", "under", "over",
         }
         substantive_query_words = query_words - stop_words
 
@@ -241,8 +277,9 @@ class AnswerGenerator:
 
         unsupported_claims: List[str] = []
         if len(unsupported) >= 2:
+            unsupported_terms = ", ".join(f"'{u}'" for u in unsupported[:2])
             unsupported_claims = [f"Specific detail regarding '{u}' was not found in knowledge base" for u in unsupported[:2]]
-            answer_text += f"\n\nNote: Details regarding {', '.join(unsupported[:2])} are not specified in the current policy."
+            answer_text += f"\n\nNote: Details regarding {unsupported_terms} are not specified in the current policy."
 
 
         confidence = 0.95 if not unsupported_claims else 0.70

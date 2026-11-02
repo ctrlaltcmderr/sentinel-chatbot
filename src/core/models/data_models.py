@@ -99,6 +99,8 @@ class SentimentResult:
     language: str = "en"
     is_high_risk: bool = False
     high_risk_triggers: List[str] = field(default_factory=list)
+    risk_category: Optional[str] = None
+    risk_level: str = "none"  # "critical", "high", "medium", "none"
     is_sarcastic: bool = False
     recommended_tone: str = "professional"
     raw_text: str = ""

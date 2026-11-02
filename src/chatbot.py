@@ -217,6 +217,51 @@ class SentinelChatbot:
                 ),
             ),
             KnowledgeDocument(
+                id="kb-sec-public-2026",
+                title="Account Security & Unauthorized Access Policy",
+                product="General",
+                region="global",
+                access_level=AccessLevel.PUBLIC,
+                version=1,
+                effective_date=datetime(2025, 1, 1),
+                expiry_date=None,
+                content=(
+                    "If you notice unauthorized account access or suspect your account is compromised, "
+                    "immediately change your password and notify customer support. Our security team will "
+                    "terminate active sessions, secure your account credentials, and investigate all unauthorized actions."
+                ),
+            ),
+            KnowledgeDocument(
+                id="kb-fraud-public-2026",
+                title="Payment Security & Fraud Protection Policy",
+                product="General",
+                region="global",
+                access_level=AccessLevel.PUBLIC,
+                version=1,
+                effective_date=datetime(2025, 1, 1),
+                expiry_date=None,
+                content=(
+                    "Customers are fully protected against unauthorized payments and fraudulent charges. If you identify "
+                    "an unrecognized charge, report it immediately to our security response team. Verified unauthorized "
+                    "transactions are cancelled and refunded in full."
+                ),
+            ),
+            KnowledgeDocument(
+                id="kb-ship-public-2026",
+                title="Shipping and Delivery Policy",
+                product="General",
+                region="global",
+                access_level=AccessLevel.PUBLIC,
+                version=1,
+                effective_date=datetime(2025, 1, 1),
+                expiry_date=None,
+                content=(
+                    "Standard delivery takes 3 to 5 business days, and express delivery delivers in 1 to 2 business days. "
+                    "To check tracking details, please provide your Order ID. If an order is delayed, support will open a "
+                    "carrier delivery investigation."
+                ),
+            ),
+            KnowledgeDocument(
                 id="kb-settle-playbook",
                 title="Executive Settlement Playbook",
                 product="All",
@@ -390,6 +435,12 @@ class SentinelChatbot:
         ticket: Optional[SupportTicket] = None
         if escalation_record:
             ticket = self.ticket_creator.create_from_conversation(ctx)
+            # Ensure issue category reflects high-risk security and fraud classifications
+            if sentiment_res.risk_category in {"account_compromise", "unauthorized_payment"} or "without permission" in cleaned_text.lower():
+                ticket.issue_category = "account_security"
+            elif sentiment_res.risk_category == "duplicate_payment":
+                ticket.issue_category = "billing"
+
             # Calculate priority
             priority, p_score = self.priority_calculator.calculate(ticket, sentiment_res, ctx)
             ticket.priority = priority
@@ -435,6 +486,8 @@ class SentinelChatbot:
             "sentiment": sentiment_res.sentiment.value,
             "confidence": sentiment_res.confidence,
             "is_high_risk": sentiment_res.is_high_risk,
+            "risk_category": sentiment_res.risk_category,
+            "risk_level": sentiment_res.risk_level,
             "escalated": escalation_record is not None,
             "escalation_reason": escalation_record.reason.value if escalation_record else None,
             "ticket_id": ticket.id if ticket else None,

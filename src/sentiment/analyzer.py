@@ -159,6 +159,51 @@ SARCASTIC_PHRASES: Dict[str, List[str]] = {
     ],
 }
 
+# ──────────────────────── High-Risk Patterns by Category ────────────────────────
+_RISK_PATTERNS: Dict[str, List[str]] = {
+    "account_compromise": [
+        r"\b(?:someone|somebody|anyone)\s+(?:else\s+)?(?:has\s+)?(?:accessed|logged(?:\s+in(?:to)?)?|hacked|used|entered|compromised)\s+(?:my|the)\s+account\b",
+        r"\baccess(?:ed)?\s+(?:my\s+|the\s+)?account\s+without\s+(?:my\s+)?permission\b",
+        r"\bwithout\s+(?:my\s+)?permission\b",
+        r"\bunauthorized\s+access\b",
+        r"\baccount\s+(?:was\s+|is\s+|got\s+)?compromise(?:d)?\b",
+        r"\bcompromised\s+account\b",
+        r"\bhack(?:ed)?\b",
+        r"\baccount\s+takeover\b",
+        r"\bstolen\s+(?:credentials|password|login)\b",
+        r"\bsuspicious\s+(?:login|activity)\b",
+        r"\bunrecognized\s+login\b",
+        r"\bsecurity\s+breach\b",
+        r"\bidentity\s+theft\b",
+    ],
+    "unauthorized_payment": [
+        r"\bunauthorized\s+(?:payment|charge|transaction|withdrawal|debit|purchase)\b",
+        r"\b(?:didn't|did\s+not|never)\s+authorize\s+(?:this|the|a)\s+(?:payment|charge|transaction|purchase)\b",
+        r"\bfraud(?:ulent)?\s+(?:payment|charge|transaction|activity)\b",
+        r"\bstolen\s+(?:card|credit\s+card|debit\s+card)\b",
+        r"\bcard\s+(?:was\s+)?stolen\b",
+        r"\bsomeone\s+(?:used|charged)\s+my\s+(?:card|credit\s+card|account)\b",
+    ],
+    "duplicate_payment": [
+        r"\bduplicate\s+(?:payment|charge|transaction|billing)\b",
+        r"\bdouble\s+charg(?:e|ed|ing)\b",
+        r"\bcharg(?:ed|e)\s+twice\b",
+        r"\bcharg(?:ed|e)\s+double\b",
+        r"\bpaid\s+twice\b",
+        r"\bbilled\s+twice\b",
+        r"\btwo\s+charges\s+for\s+(?:the\s+same|one)\b",
+    ],
+    "legal_threat": [
+        r"\blegal\s+(?:action|counsel|proceedings|recourse)\b",
+        r"\b(?:call|hire|contact|get)\s+(?:a\s+|my\s+)?(?:lawyer|attorney)\b",
+        r"\blawsuit\b",
+        r"\bsue\s+(?:you|your\s+company|the\s+company)\b",
+        r"\bsuing\b",
+        r"\btake\s+(?:you|this)\s+to\s+court\b",
+        r"\breport\s+(?:you\s+)?to\s+(?:authorities|ftc|police|regulator)\b",
+    ],
+}
+
 
 class SentimentAnalyzer:
     """
@@ -199,8 +244,8 @@ class SentimentAnalyzer:
             scores["sarcastic"] += 0.35
             scores["positive"] = max(0.0, scores["positive"] - 0.3)
 
-        # 3. Detect high-risk keywords
-        is_high_risk, high_risk_triggers = self._detect_high_risk(text)
+        # 3. Detect high-risk keywords and categories
+        is_high_risk, high_risk_triggers, risk_category, risk_level = self._detect_high_risk(text)
 
         # 4. Normalise scores so they sum to ~1.0
         scores = self._normalise_scores(scores)
@@ -225,6 +270,8 @@ class SentimentAnalyzer:
             language=lang,
             is_high_risk=is_high_risk,
             high_risk_triggers=high_risk_triggers,
+            risk_category=risk_category,
+            risk_level=risk_level,
             is_sarcastic=is_sarcastic,
             recommended_tone=recommended_tone,
             raw_text=text,
@@ -283,6 +330,24 @@ class SentimentAnalyzer:
                     scores["negative"] += 0.05
                 if scores["frustrated"] > 0:
                     scores["frustrated"] += 0.05
+
+        # Critical risk influences urgent and negative sentiment dimensions
+        for cat, patterns in _RISK_PATTERNS.items():
+            for pat in patterns:
+                if re.search(pat, lower):
+                    if cat in {"account_compromise", "unauthorized_payment"}:
+                        scores["urgent"] += 0.45
+                        scores["negative"] += 0.25
+                        scores["neutral"] = 0.0
+                    elif cat == "duplicate_payment":
+                        scores["urgent"] += 0.30
+                        scores["negative"] += 0.20
+                        scores["neutral"] = 0.0
+                    elif cat == "legal_threat":
+                        scores["negative"] += 0.40
+                        scores["urgent"] += 0.25
+                        scores["neutral"] = 0.0
+                    break
 
         return scores
 
@@ -374,14 +439,58 @@ class SentimentAnalyzer:
 
     # ────────────────── High-Risk Detection ──────────────────
 
-    def _detect_high_risk(self, text: str) -> Tuple[bool, List[str]]:
-        """Detect high-risk keywords that require escalation regardless of tone."""
+    def _detect_high_risk(self, text: str) -> Tuple[bool, List[str], Optional[str], str]:
+        """
+        Detect high-risk triggers, risk category, and risk level.
+        Runs on every customer message independently of sentiment score.
+        Returns: (is_high_risk, triggers, primary_risk_category, risk_level)
+        """
         lower = text.lower()
         triggers: List[str] = []
+        matched_categories: List[str] = []
+
+        # 1. Match categorized regex patterns
+        for category, patterns in _RISK_PATTERNS.items():
+            for pat in patterns:
+                m = re.search(pat, lower)
+                if m:
+                    matched_str = m.group(0)
+                    if matched_str not in triggers:
+                        triggers.append(matched_str)
+                    if category not in matched_categories:
+                        matched_categories.append(category)
+
+        # 2. Check config high-risk keywords for backwards compatibility
         for keyword in self.config.high_risk_keywords:
-            if keyword.lower() in lower:
-                triggers.append(keyword)
-        return len(triggers) > 0, triggers
+            if keyword.lower() in lower and keyword.lower() not in triggers:
+                triggers.append(keyword.lower())
+                kw = keyword.lower()
+                if any(w in kw for w in ["compromise", "hacked", "unauthorized access", "permission"]):
+                    if "account_compromise" not in matched_categories:
+                        matched_categories.append("account_compromise")
+                elif any(w in kw for w in ["unauthorized payment", "unauthorized charge", "fraud"]):
+                    if "unauthorized_payment" not in matched_categories:
+                        matched_categories.append("unauthorized_payment")
+                elif any(w in kw for w in ["duplicate payment", "double charged", "charged twice"]):
+                    if "duplicate_payment" not in matched_categories:
+                        matched_categories.append("duplicate_payment")
+                elif any(w in kw for w in ["legal", "lawyer", "lawsuit", "sue", "court", "attorney"]):
+                    if "legal_threat" not in matched_categories:
+                        matched_categories.append("legal_threat")
+
+        is_high_risk = len(triggers) > 0
+        primary_category = matched_categories[0] if matched_categories else None
+
+        if primary_category in {"account_compromise", "unauthorized_payment", "legal_threat"}:
+            risk_level = "critical"
+        elif primary_category == "duplicate_payment":
+            risk_level = "high"
+        elif is_high_risk:
+            risk_level = "high"
+        else:
+            risk_level = "none"
+
+        return is_high_risk, triggers, primary_category, risk_level
 
     # ────────────────── Score Normalisation ──────────────────
 
