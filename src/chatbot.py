@@ -366,12 +366,14 @@ class SentinelChatbot:
                 clarification_message="",
             )
         else:
+            tracked_entities = self.context_manager.get_tracked_entities(session_id)
+            rag_context = {"order_id": tracked_entities.get("order_id"), "session_id": session_id}
             retrieved_docs = self.retriever.retrieve(
                 query=cleaned_text,
                 user_access_level=user_access_level,
                 reference_date=reference_date,
             )
-            rag_res = self.answer_generator.generate_answer(cleaned_text, retrieved_docs)
+            rag_res = self.answer_generator.generate_answer(cleaned_text, retrieved_docs, context=rag_context)
             base_answer = rag_res.answer
 
         # 6. Dynamic Tone Adjustment (preserving business policies)

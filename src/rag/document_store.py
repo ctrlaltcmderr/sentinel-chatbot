@@ -18,6 +18,18 @@ from ..core.utils.helpers import get_logger, normalize_text, compute_hash
 
 logger = get_logger("rag.document_store")
 
+# Domain synonyms to enhance retrieval recall across related concepts
+SYNONYM_MAP: Dict[str, Set[str]] = {
+    "refund": {"return", "returns", "refunds", "reimbursement"},
+    "refunds": {"return", "returns", "refund", "reimbursement"},
+    "return": {"refund", "refunds", "returns"},
+    "returns": {"refund", "refunds", "return"},
+    "warranty": {"guarantee", "warranties", "coverage"},
+    "warranties": {"guarantee", "warranty", "coverage"},
+    "guarantee": {"warranty", "warranties"},
+}
+
+
 
 class DocumentStore:
     """
@@ -125,6 +137,7 @@ class DocumentStore:
         self,
         query: str = "",
         filters: Optional[Dict] = None,
+        min_relevance_threshold: float = 0.05,
     ) -> List[KnowledgeDocument]:
         """
         Search documents using keyword matching and metadata filters.
@@ -137,6 +150,7 @@ class DocumentStore:
                 - access_level (str): Filter by access level value
                 - tags (List[str]): Filter by tags (any match)
                 - status (str): Filter by document status
+            min_relevance_threshold: Minimum TF-IDF relevance score required when query is provided.
 
         Returns:
             List of matching KnowledgeDocument objects, ranked by relevance.
@@ -179,11 +193,13 @@ class DocumentStore:
         # If query provided, score and rank by relevance
         if query.strip():
             scored = self._score_documents(query, candidate_ids)
-            # Sort by score descending
+            # Filter strictly by minimum relevance threshold - never return zero or irrelevant docs
+            scored = [(doc_id, s) for doc_id, s in scored if s >= min_relevance_threshold]
             scored.sort(key=lambda x: x[1], reverse=True)
             return [self._documents[doc_id] for doc_id, _ in scored if doc_id in self._documents]
         else:
             return [self._documents[doc_id] for doc_id in candidate_ids if doc_id in self._documents]
+
 
     @property
     def document_count(self) -> int:
@@ -240,42 +256,58 @@ class DocumentStore:
         self, query: str, candidate_ids: Set[str]
     ) -> List[tuple[str, float]]:
         """
-        Score documents against a query using TF-IDF-like ranking.
+        Score documents against a query using TF-IDF ranking with title, keyword, and synonym weighting.
 
         Args:
             query: The search query.
             candidate_ids: Set of document IDs to consider.
 
         Returns:
-            List of (doc_id, score) tuples.
+            List of (doc_id, score) tuples with score > 0.
         """
         query_tokens = self._tokenize(query)
         if not query_tokens:
-            return [(doc_id, 0.0) for doc_id in candidate_ids]
+            return []
 
         total_docs = max(len(self._documents), 1)
         scores: Dict[str, float] = defaultdict(float)
 
         for token in query_tokens:
-            if token not in self._inverted_index:
-                continue
+            tokens_to_check = [(token, 1.0)]
+            for syn in SYNONYM_MAP.get(token, set()):
+                tokens_to_check.append((syn, 0.85))
 
-            doc_freqs = self._inverted_index[token]
-            # IDF: log(total_docs / docs_containing_term)
-            df = len(doc_freqs)
-            idf = math.log((total_docs + 1) / (df + 1)) + 1.0
+            for t, weight in tokens_to_check:
+                if t not in self._inverted_index:
+                    continue
 
-            for doc_id in candidate_ids:
-                if doc_id in doc_freqs:
-                    tf = doc_freqs[doc_id]
-                    doc_len = self._doc_lengths.get(doc_id, 1)
-                    # Normalized TF
-                    normalized_tf = tf / doc_len
-                    scores[doc_id] += normalized_tf * idf
+                doc_freqs = self._inverted_index[t]
+                df = len(doc_freqs)
+                idf = (math.log((total_docs + 1) / (df + 1)) + 1.0) * weight
 
-        # Include zero-score candidates
+                for doc_id in candidate_ids:
+                    if doc_id in doc_freqs:
+                        tf = doc_freqs[doc_id]
+                        doc_len = self._doc_lengths.get(doc_id, 1)
+                        # Normalized TF
+                        normalized_tf = tf / doc_len
+                        scores[doc_id] += normalized_tf * idf
+
+                        # Boost score if token appears in title or product name
+                        doc = self._documents.get(doc_id)
+                        if doc:
+                            if t in doc.title.lower():
+                                scores[doc_id] += 0.3 * idf
+                            if doc.product and t in doc.product.lower():
+                                scores[doc_id] += 0.2 * idf
+
+        # Only return candidates that genuinely matched query tokens with positive score
         result = []
         for doc_id in candidate_ids:
-            result.append((doc_id, scores.get(doc_id, 0.0)))
+            score = scores.get(doc_id, 0.0)
+            if score > 0.0:
+                result.append((doc_id, score))
 
         return result
+
+

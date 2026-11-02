@@ -19,6 +19,8 @@ from ..core.utils.helpers import TimeProvider, get_logger
 from .document_store import DocumentStore
 from .policy_resolver import PolicyResolver
 from .safety_checker import SafetyChecker
+from .query_intent import QueryIntent, classify_query_intent, is_document_relevant_to_intent
+
 
 
 logger = get_logger("rag.retriever")
@@ -79,21 +81,43 @@ class DocumentRetriever:
         """
         filters = filters or {}
 
-        # Step 1: Query the store with keyword search and metadata filters
+        # Step 0: Check query safety
+        is_safe, issues = self._safety_checker.check_query(query)
+        if not is_safe:
+            logger.warning(f"Unsafe query detected during retrieval: {issues}")
+            return []
+
+        # Step 1: Query Intent Relevance Check
+        intent_res = classify_query_intent(query)
+        if intent_res.intent == QueryIntent.ORDER_TRACKING:
+            logger.info("Query identified as ORDER_TRACKING. Static policy documents excluded.")
+            return []
+
+        # Step 2: Query the store with keyword search and metadata filters
         candidates = self._store.search(query=query, filters=filters)
 
         if not candidates:
             logger.info(f"No candidates found for query: '{query[:80]}'")
             return []
 
-        # Step 2: Filter by access level
+        # Step 3: Semantic Intent Filtering (ensure documents align with query intent)
+        candidates = [
+            doc for doc in candidates
+            if is_document_relevant_to_intent(doc, intent_res.intent)
+        ]
+
+        if not candidates:
+            logger.info(f"No candidates aligned with intent '{intent_res.intent.value}' for query: '{query[:80]}'")
+            return []
+
+        # Step 4: Filter by access level
         candidates = self._filter_by_access_level(candidates, user_access_level)
 
         if not candidates:
             logger.info(f"No documents accessible at level '{user_access_level}'")
             return []
 
-        # Step 3: Filter by temporal validity
+        # Step 5: Filter by temporal validity
         check_date = reference_date if reference_date is not None else self._time_provider.now()
         candidates = self._filter_by_temporal_validity(candidates, check_date)
 
@@ -101,14 +125,15 @@ class DocumentRetriever:
             logger.info(f"No temporally valid documents for date {check_date.isoformat()}")
             return []
 
-        # Step 4: Resolve conflicts among same-topic documents
+        # Step 6: Resolve conflicts among same-topic documents
         candidates = self._resolve_duplicates(candidates, reference_date)
 
         logger.info(
             f"Retrieved {len(candidates)} document(s) for query: '{query[:80]}' "
-            f"(access={user_access_level})"
+            f"(intent={intent_res.intent.value}, access={user_access_level})"
         )
         return candidates
+
 
     def _filter_by_access_level(
         self,
