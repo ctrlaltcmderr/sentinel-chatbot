@@ -18,6 +18,7 @@ import {
   ExternalLink,
   ChevronRight,
   Clock,
+  ArrowRight,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { ChatMessage, Conversation, FileInfo } from '../types';
@@ -97,61 +98,49 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
     fetchConversation();
   }, [activeSessionId]);
 
-  // Auto-scroll to bottom of messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
   const handleNewChat = () => {
-    const newId = `sess-${Date.now().toString(36)}`;
-    setActiveSessionId(newId);
+    const newSessionId = `sess-${Date.now()}`;
+    setActiveSessionId(newSessionId);
     setMessages([]);
-    setInputText('');
-    setUploadedFileInfo(null);
     setSelectedFile(null);
-    setErrorMsg(null);
+    setUploadedFileInfo(null);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setSelectedFile(file);
-    setUploading(true);
-    setErrorMsg(null);
-
     try {
-      const res = await api.uploadFile(file, customerId, activeSessionId);
-      setUploadedFileInfo(res);
-      if (!res.is_safe) {
-        setErrorMsg('The uploaded file was rejected due to safety or prompt-injection policy.');
-      }
+      setUploading(true);
+      setSelectedFile(file);
+      const info = await api.uploadFile(file);
+      setUploadedFileInfo(info);
     } catch (err: any) {
-      setErrorMsg(err.message || 'File upload failed');
+      setErrorMsg(`Failed to upload/parse file: ${err.message}`);
       setSelectedFile(null);
     } finally {
       setUploading(false);
     }
   };
 
-  const handleSendMessage = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!inputText.trim() && !uploadedFileInfo) return;
 
-    const textToSend = inputText.trim();
+    const userText = inputText.trim();
     setInputText('');
     setErrorMsg(null);
 
-    // Optimistically append user message
     const tempUserMsg: ChatMessage = {
-      id: Date.now(),
-      session_id: activeSessionId || 'pending',
+      id: `tmp-${Date.now()}`,
+      session_id: activeSessionId,
       sender: 'customer',
-      content: textToSend || `Uploaded file: ${selectedFile?.name}`,
+      content: userText || `[Attached File: ${uploadedFileInfo?.original_filename}]`,
       timestamp: new Date().toISOString(),
-      language: 'en',
-      is_high_risk: false,
-      escalated: false,
       file_info: uploadedFileInfo,
     };
     setMessages((prev) => [...prev, tempUserMsg]);
@@ -160,27 +149,25 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
     try {
       const response = await api.sendMessage({
         customer_id: customerId,
-        message: textToSend || `Please analyze this attached document: ${selectedFile?.name}`,
-        session_id: activeSessionId || undefined,
+        message: userText,
+        session_id: activeSessionId,
         reference_date: referenceDate || undefined,
         user_access_level: accessLevel,
-        uploaded_file: uploadedFileInfo?.file_path,
+        uploaded_file: uploadedFileInfo?.storage_path,
       });
 
-      // Update active session ID if newly assigned
-      if (response.session_id && response.session_id !== activeSessionId) {
+      if (!activeSessionId || activeSessionId.startsWith('sess-')) {
         setActiveSessionId(response.session_id);
       }
 
-      // Append bot response and update customer message with analysis metadata
       const botMsg: ChatMessage = {
-        id: Date.now() + 1,
+        id: `bot-${Date.now()}`,
         session_id: response.session_id,
         sender: 'sentinel',
         content: response.reply,
         timestamp: response.timestamp || new Date().toISOString(),
-        language: 'en',
-        sentiment: undefined, // Sentinel reply is objective/professional
+        sentiment: response.sentiment,
+        confidence: response.confidence,
         is_high_risk: response.is_high_risk,
         risk_category: response.risk_category,
         risk_level: response.risk_level,
@@ -188,7 +175,8 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
         escalation_reason: response.escalation_reason,
         ticket_id: response.ticket_id,
         assigned_team: response.assigned_team,
-        sources: response.sources || [],
+        sources: response.sources,
+        file_info: response.file_result,
       };
 
       setMessages((prev) => {
@@ -217,7 +205,6 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
       setSelectedFile(null);
       setUploadedFileInfo(null);
 
-      // Refresh conversation list in sidebar
       loadConversations();
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to send message to Sentinel');
@@ -234,7 +221,6 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
   const activeRiskCategory = latestCustomerMessage?.risk_category || latestBotMessage?.risk_category || activeConv?.risk_category;
   const activeRiskLevel = latestCustomerMessage?.risk_level || latestBotMessage?.risk_level || activeConv?.risk_level || (activeConv?.is_high_risk ? 'critical' : 'none');
   const activeSources = latestBotMessage?.sources || [];
-  const latestMessage = messages.length > 0 ? messages[messages.length - 1] : null;
 
   const quickPrompts = [
     'What is the warranty policy for the UltraLaptop?',
@@ -242,7 +228,7 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
     'I noticed an unauthorized access on my account and double charged payment.',
     'Oh great, another delayed package. Wonderful customer service as always!',
     'Here is my invoice, I was charged $150.00 for order ORD-998811.',
-    'Mera order kab deliver hoga mujhe status update chahiye.',
+    'Where is my order? It was supposed to arrive yesterday.',
   ];
 
   const filteredConversations = conversations.filter(
@@ -253,56 +239,58 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
   );
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
-      {/* ── Left Sidebar: Conversation History ── */}
-      <div className="w-80 border-r border-border bg-card/60 flex flex-col shrink-0">
+    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
+      {/* ── Left Sidebar: Conversation List ── */}
+      <div className="w-72 border-r border-border bg-card flex flex-col shrink-0">
         <div className="p-3 border-b border-border space-y-2">
           <button
             onClick={handleNewChat}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground font-medium text-xs shadow-sm hover:opacity-95 transition-opacity"
+            className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-md bg-zinc-100 text-zinc-950 font-medium text-xs hover:bg-white transition-colors shadow-sm"
           >
-            <Plus className="w-4 h-4" />
-            <span>New Customer Chat</span>
+            <Plus className="w-3.5 h-3.5" />
+            <span>New Customer Session</span>
           </button>
           <div className="relative">
-            <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-2.5" />
+            <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-2" />
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search conversations..."
-              className="w-full pl-8 pr-3 py-1.5 rounded-md bg-muted/50 border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary text-foreground"
+              placeholder="Filter sessions..."
+              className="w-full pl-7 pr-2.5 py-1 rounded bg-zinc-900 border border-border text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
             />
           </div>
         </div>
 
         {/* Conversation List */}
-        <div className="flex-1 overflow-y-auto divide-y divide-border/40 p-2 space-y-0.5">
+        <div className="flex-1 overflow-y-auto divide-y divide-border/60 p-2 space-y-0.5">
           {filteredConversations.map((c) => {
             const isActive = c.id === activeSessionId;
             return (
               <div
                 key={c.id}
                 onClick={() => setActiveSessionId(c.id)}
-                className={`p-3 rounded-lg cursor-pointer transition-all space-y-1.5 ${
+                className={`p-2.5 rounded-md cursor-pointer transition-colors space-y-1 ${
                   isActive
-                    ? 'bg-primary/10 border border-primary/20 text-foreground'
-                    : 'hover:bg-muted/50 text-muted-foreground hover:text-foreground'
+                    ? 'bg-zinc-800/90 text-zinc-100 border border-white/[0.06] shadow-sm'
+                    : 'hover:bg-zinc-900/60 text-zinc-400 hover:text-zinc-200'
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-foreground truncate max-w-[170px]">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-xs font-medium text-zinc-200 truncate">
                     {c.title}
                   </span>
-                  <span className="text-[10px] text-muted-foreground">
+                  <span className="text-[10px] font-mono text-zinc-500 shrink-0">
                     {new Date(c.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-muted-foreground truncate">{c.customer_name || c.customer_id}</span>
+                  <span className="text-zinc-500 truncate max-w-[130px]">{c.customer_name || c.customer_id}</span>
                   <div className="flex items-center gap-1.5">
                     {c.is_high_risk && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
+                      <span className="text-[9px] font-mono font-medium text-red-400 bg-red-500/10 border border-red-500/20 px-1 rounded">
+                        RISK
+                      </span>
                     )}
                     <SentimentBadge sentiment={c.last_sentiment} size="sm" />
                   </div>
@@ -311,29 +299,29 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
             );
           })}
           {filteredConversations.length === 0 && (
-            <div className="p-6 text-center text-xs text-muted-foreground">
-              No matching conversations.
+            <div className="p-6 text-center text-xs text-zinc-500 font-mono">
+              No matching sessions found.
             </div>
           )}
         </div>
 
         {/* User Context Controls */}
-        <div className="p-3 border-t border-border bg-card/80 space-y-2 text-xs">
+        <div className="p-3 border-t border-border bg-zinc-950/40 space-y-2 text-xs">
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground font-medium">Customer ID:</span>
+            <span className="text-zinc-400 text-[11px]">Customer ID:</span>
             <input
               type="text"
               value={customerId}
               onChange={(e) => setCustomerId(e.target.value)}
-              className="w-28 px-2 py-0.5 rounded bg-muted/60 border border-border text-foreground font-mono text-[11px] text-right"
+              className="w-28 px-2 py-0.5 rounded bg-zinc-900 border border-border text-zinc-200 font-mono text-[11px] text-right focus:outline-none focus:border-zinc-500"
             />
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground font-medium">RBAC Tier:</span>
+            <span className="text-zinc-400 text-[11px]">RBAC Tier:</span>
             <select
               value={accessLevel}
               onChange={(e) => setAccessLevel(e.target.value)}
-              className="px-2 py-0.5 rounded bg-muted/60 border border-border text-foreground text-[11px]"
+              className="px-2 py-0.5 rounded bg-zinc-900 border border-border text-zinc-200 text-[11px] focus:outline-none focus:border-zinc-500"
             >
               <option value="public">Public</option>
               <option value="internal">Internal</option>
@@ -342,12 +330,12 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
             </select>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground font-medium">Ref Date (RAG):</span>
+            <span className="text-zinc-400 text-[11px]">Ref Date (RAG):</span>
             <input
               type="date"
               value={referenceDate}
               onChange={(e) => setReferenceDate(e.target.value)}
-              className="px-1.5 py-0.5 rounded bg-muted/60 border border-border text-foreground text-[11px]"
+              className="px-1.5 py-0.5 rounded bg-zinc-900 border border-border text-zinc-200 text-[11px] focus:outline-none focus:border-zinc-500"
             />
           </div>
         </div>
@@ -356,28 +344,28 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
       {/* ── Center: Main Chat Messages Flow ── */}
       <div className="flex-1 flex flex-col justify-between bg-background overflow-hidden">
         {/* Session Sub-header */}
-        <div className="px-6 py-2.5 border-b border-border bg-card/40 flex items-center justify-between shrink-0">
+        <div className="px-5 py-2.5 border-b border-border bg-card/40 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
-              <Shield className="w-4 h-4" />
+            <div className="w-7 h-7 rounded-md bg-zinc-800 border border-zinc-700/60 flex items-center justify-center text-zinc-300">
+              <Shield className="w-3.5 h-3.5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-foreground">
+                <span className="text-xs font-semibold text-zinc-200">
                   {activeConv?.title || 'Interactive Support Session'}
                 </span>
-                <span className="text-[10px] text-muted-foreground font-mono">
-                  ({activeSessionId.slice(0, 14)}...)
+                <span className="text-[10px] text-zinc-500 font-mono">
+                  ({activeSessionId.slice(0, 12)}...)
                 </span>
               </div>
-              <div className="text-[11px] text-muted-foreground flex items-center gap-2">
-                <span>Customer: <strong className="text-foreground font-medium">{customerId}</strong></span>
+              <div className="text-[11px] text-zinc-500 flex items-center gap-2">
+                <span>Customer: <strong className="text-zinc-300 font-medium">{customerId}</strong></span>
                 <span>•</span>
-                <span>RBAC: <span className="capitalize text-primary font-medium">{accessLevel}</span></span>
+                <span>RBAC: <span className="capitalize text-zinc-300 font-medium">{accessLevel}</span></span>
                 {referenceDate && (
                   <>
                     <span>•</span>
-                    <span className="text-amber-500 font-medium">Historical Query: {referenceDate}</span>
+                    <span className="text-amber-400 font-mono text-[10px]">Date Anchor: {referenceDate}</span>
                   </>
                 )}
               </div>
@@ -386,7 +374,7 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
 
           <button
             onClick={() => setShowInspector(!showInspector)}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground px-2.5 py-1 rounded-md border border-border bg-muted/40 hover:bg-muted"
+            className="flex items-center gap-1.5 text-[11px] text-zinc-400 hover:text-zinc-200 px-2.5 py-1 rounded border border-border bg-zinc-900/40 hover:bg-zinc-800 transition-colors"
           >
             <Info className="w-3.5 h-3.5" />
             <span>{showInspector ? 'Hide Inspector' : 'Show Inspector'}</span>
@@ -397,21 +385,21 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {messages.length === 0 && !loading && (
             <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-4 max-w-lg mx-auto">
-              <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-sm">
-                <Shield className="w-6 h-6 text-primary" />
+              <div className="w-10 h-10 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 shadow-sm">
+                <Shield className="w-5 h-5 text-zinc-300" />
               </div>
               <div className="space-y-1">
-                <h3 className="text-sm font-semibold text-foreground">Sentinel Chatbot Engine Ready</h3>
-                <p className="text-xs text-muted-foreground">
-                  Test live multilingual sentiment analysis, sarcasm detection, calm high-risk escalations,
-                  temporal RAG policies, or upload an invoice for multimodal OCR validation.
+                <h3 className="text-sm font-semibold text-zinc-200">Sentinel Chatbot Engine Online</h3>
+                <p className="text-xs text-zinc-500">
+                  Test sentiment classification, context-aware sarcasm detection, high-risk security escalation,
+                  intent-grounded RAG retrieval, and receipt discrepancy verification.
                 </p>
               </div>
 
               {/* Quick Prompts */}
               <div className="w-full text-left space-y-1.5 pt-2">
-                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">
-                  Quick Evaluation Prompts:
+                <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider block">
+                  Interactive Evaluation Probes:
                 </span>
                 <div className="grid grid-cols-1 gap-1.5">
                   {quickPrompts.map((prompt, idx) => (
@@ -423,10 +411,10 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
                           setReferenceDate('2024-03-15');
                         }
                       }}
-                      className="text-xs text-left p-2 rounded-lg bg-card border border-border hover:border-primary/40 text-foreground transition-all flex items-center justify-between group"
+                      className="text-xs text-left p-2.5 rounded-md bg-zinc-900/60 border border-border hover:border-zinc-700 text-zinc-300 hover:text-white transition-colors flex items-center justify-between group"
                     >
                       <span className="truncate">{prompt}</span>
-                      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary shrink-0 ml-2" />
+                      <ChevronRight className="w-3.5 h-3.5 text-zinc-500 group-hover:text-zinc-300 shrink-0 ml-2" />
                     </button>
                   ))}
                 </div>
@@ -443,41 +431,45 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
               >
                 {/* Avatar */}
                 <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 border text-xs font-semibold ${
+                  className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 border text-[11px] font-mono ${
                     isBot
-                      ? 'bg-primary/10 text-primary border-primary/20'
-                      : 'bg-muted text-foreground border-border'
+                      ? 'bg-zinc-800 text-zinc-300 border-zinc-700'
+                      : 'bg-zinc-900 text-zinc-300 border-zinc-700'
                   }`}
                 >
-                  {isBot ? <Shield className="w-4 h-4" /> : <User className="w-4 h-4" />}
+                  {isBot ? <Shield className="w-3.5 h-3.5" /> : <User className="w-3.5 h-3.5" />}
                 </div>
 
                 {/* Content Bubble */}
-                <div className="space-y-1.5">
+                <div className="space-y-1">
                   <div
-                    className={`p-4 rounded-2xl text-xs leading-relaxed ${
+                    className={`p-3.5 rounded-lg text-xs leading-relaxed ${
                       isBot
-                        ? 'bg-card border border-border text-foreground shadow-sm'
-                        : 'bg-primary text-primary-foreground shadow-sm'
+                        ? 'bg-card border border-border text-zinc-200 shadow-sm'
+                        : 'bg-zinc-800/90 text-zinc-100 border border-zinc-700/80 shadow-sm'
                     }`}
                   >
                     <div className="whitespace-pre-wrap">{m.content}</div>
 
                     {/* File Attachment Badge */}
                     {m.file_info && (
-                      <div className="mt-3 p-2.5 rounded-lg bg-background/80 border border-border text-foreground space-y-1 text-[11px]">
-                        <div className="flex items-center gap-1.5 font-semibold text-primary">
-                          <FileText className="w-3.5 h-3.5" />
-                          <span>Processed File: {m.file_info.file_type?.toUpperCase()}</span>
+                      <div className="mt-3 p-2.5 rounded bg-zinc-950/70 border border-border text-zinc-300 space-y-1 text-[11px]">
+                        <div className="flex items-center gap-1.5 font-medium text-zinc-200">
+                          <FileText className="w-3.5 h-3.5 text-zinc-400" />
+                          <span>Processed Attachment: {m.file_info.file_type?.toUpperCase()}</span>
                         </div>
                         {m.file_info.extracted_order_ids?.length > 0 && (
-                          <div>Order IDs: <span className="font-mono">{m.file_info.extracted_order_ids.join(', ')}</span></div>
+                          <div className="text-zinc-400">
+                            Order IDs: <span className="font-mono text-zinc-200">{m.file_info.extracted_order_ids.join(', ')}</span>
+                          </div>
                         )}
                         {m.file_info.extracted_amounts?.length > 0 && (
-                          <div>Amounts: <span className="font-mono">{m.file_info.extracted_amounts.join(', ')}</span></div>
+                          <div className="text-zinc-400">
+                            Amounts: <span className="font-mono text-zinc-200">{m.file_info.extracted_amounts.join(', ')}</span>
+                          </div>
                         )}
                         {m.file_info.conflicts_detected?.length > 0 && (
-                          <div className="text-amber-500 font-medium">
+                          <div className="text-amber-400 font-medium">
                             Discrepancies: {m.file_info.conflicts_detected.join(' | ')}
                           </div>
                         )}
@@ -486,15 +478,17 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
 
                     {/* Grounding Sources & Citations */}
                     {isBot && m.sources && m.sources.length > 0 && (
-                      <div className="mt-3 pt-2.5 border-t border-border/60 text-[11px] space-y-1">
-                        <span className="font-semibold text-muted-foreground block">Verified Knowledge Sources:</span>
+                      <div className="mt-3 pt-2.5 border-t border-border/60 text-[11px] space-y-1.5">
+                        <span className="font-semibold text-zinc-400 block text-[10px] uppercase tracking-wider">
+                          Grounding Evidence:
+                        </span>
                         <div className="flex flex-wrap gap-1.5">
                           {m.sources.map((src, i) => (
                             <span
                               key={i}
-                              className="px-2 py-0.5 rounded bg-muted/60 border border-border text-foreground flex items-center gap-1"
+                              className="px-2 py-0.5 rounded bg-zinc-900 border border-border text-zinc-300 flex items-center gap-1 font-mono text-[10px]"
                             >
-                              <ExternalLink className="w-2.5 h-2.5 text-primary" />
+                              <ExternalLink className="w-2.5 h-2.5 text-zinc-500" />
                               {typeof src === 'string' ? src : src.title || src.document_id}
                             </span>
                           ))}
@@ -505,25 +499,22 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
 
                   {/* Metadata line */}
                   <div
-                    className={`flex items-center gap-2 text-[10px] text-muted-foreground ${
+                    className={`flex items-center gap-2 text-[10px] text-zinc-500 ${
                       isBot ? 'justify-start' : 'justify-end'
                     }`}
                   >
-                    <span>{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    <span className="font-mono">
+                      {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
                     {!isBot && m.sentiment && (
                       <div className="flex items-center gap-1.5">
                         <SentimentBadge sentiment={m.sentiment} confidence={m.confidence} isHighRisk={m.is_high_risk} size="sm" />
-                        {m.is_high_risk && (
-                          <span className="px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 font-bold uppercase text-[9px]">
-                            {m.risk_category ? m.risk_category.replace('_', ' ') : 'CRITICAL RISK'}
-                          </span>
-                        )}
                       </div>
                     )}
                     {isBot && m.ticket_id && (
-                      <span className="px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary font-medium flex items-center gap-1 text-[10px]">
-                        <TicketIcon className="w-2.5 h-2.5" />
-                        Ticket #{m.ticket_id.slice(0, 8)} • Team: {m.assigned_team?.toUpperCase() || 'GENERAL'}
+                      <span className="px-1.5 py-0.5 rounded bg-zinc-900 border border-border text-zinc-400 font-mono text-[10px] flex items-center gap-1">
+                        <TicketIcon className="w-3 h-3 text-zinc-500" />
+                        #{m.ticket_id.slice(0, 8)} • Team: {m.assigned_team?.toUpperCase() || 'GENERAL'}
                       </span>
                     )}
                   </div>
@@ -534,14 +525,14 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
 
           {isTyping && (
             <div className="flex items-center gap-3 mr-auto">
-              <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
-                <Shield className="w-4 h-4" />
+              <div className="w-7 h-7 rounded-md bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300">
+                <Shield className="w-3.5 h-3.5" />
               </div>
-              <div className="p-3.5 rounded-2xl bg-card border border-border flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]" />
-                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]" />
-                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" />
-                <span className="text-xs text-muted-foreground ml-2 font-medium">Sentinel reasoning & safety checking...</span>
+              <div className="p-3 rounded-lg bg-card border border-border flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce [animation-delay:-0.3s]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce [animation-delay:-0.15s]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce" />
+                <span className="text-[11px] text-zinc-500 font-mono ml-2">Reasoning & safety verification...</span>
               </div>
             </div>
           )}
@@ -551,7 +542,7 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
 
         {/* Error Alert */}
         {errorMsg && (
-          <div className="mx-6 mb-2 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs flex items-center justify-between">
+          <div className="mx-6 mb-2 p-3 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 shrink-0" />
               <span>{errorMsg}</span>
@@ -564,20 +555,20 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
 
         {/* Attachment Preview Banner */}
         {selectedFile && (
-          <div className="mx-6 mb-2 p-2.5 rounded-lg bg-card border border-border flex items-center justify-between text-xs">
+          <div className="mx-6 mb-2 p-2.5 rounded-md bg-zinc-900 border border-border flex items-center justify-between text-xs">
             <div className="flex items-center gap-2">
-              <FileText className="w-4 h-4 text-primary" />
-              <span className="font-medium text-foreground">{selectedFile.name}</span>
-              <span className="text-muted-foreground">({(selectedFile.size / 1024).toFixed(1)} KB)</span>
-              {uploading && <span className="text-primary font-semibold animate-pulse">• Uploading & OCR validating...</span>}
-              {uploadedFileInfo && <span className="text-emerald-500 font-semibold">• OCR Validated</span>}
+              <FileText className="w-4 h-4 text-zinc-400" />
+              <span className="font-medium text-zinc-200">{selectedFile.name}</span>
+              <span className="text-zinc-500 font-mono">({(selectedFile.size / 1024).toFixed(1)} KB)</span>
+              {uploading && <span className="text-zinc-300 font-mono text-[11px] animate-pulse">• Uploading & OCR validating...</span>}
+              {uploadedFileInfo && <span className="text-emerald-400 font-mono text-[11px]">• OCR Validated</span>}
             </div>
             <button
               onClick={() => {
                 setSelectedFile(null);
                 setUploadedFileInfo(null);
               }}
-              className="text-muted-foreground hover:text-foreground text-xs"
+              className="text-zinc-400 hover:text-zinc-200 text-xs"
             >
               Remove
             </button>
@@ -585,7 +576,7 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
         )}
 
         {/* Input Bar Form */}
-        <form onSubmit={handleSendMessage} className="p-4 border-t border-border bg-card">
+        <form onSubmit={handleSendMessage} className="p-3.5 border-t border-border bg-card">
           <div className="flex items-center gap-2">
             <input
               type="file"
@@ -597,7 +588,7 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="p-2.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+              className="p-2 rounded border border-border text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
               title="Upload invoice, screenshot or document"
             >
               <Paperclip className="w-4 h-4" />
@@ -607,14 +598,14 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              placeholder="Ask a question, enter an order ID, or report an issue..."
-              className="flex-1 px-4 py-2.5 rounded-lg bg-muted/40 border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/70"
+              placeholder="Type customer inquiry or policy question..."
+              className="flex-1 px-3 py-2 rounded bg-zinc-900 border border-border text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500 transition-colors"
             />
 
             <button
               type="submit"
               disabled={(!inputText.trim() && !uploadedFileInfo) || isTyping}
-              className="px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold shadow-sm hover:opacity-95 transition-opacity disabled:opacity-50 flex items-center gap-1.5"
+              className="px-3.5 py-2 rounded bg-zinc-100 text-zinc-950 text-xs font-medium hover:bg-white transition-colors disabled:opacity-40 flex items-center gap-1.5"
             >
               <Send className="w-3.5 h-3.5" />
               <span>Send</span>
@@ -625,20 +616,20 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
 
       {/* ── Right Drawer: Live Conversation Intelligence Inspector ── */}
       {showInspector && (
-        <div className="w-80 border-l border-border bg-card/60 flex flex-col shrink-0 overflow-y-auto p-5 space-y-6">
-          <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Conversation Intelligence
+        <div className="w-80 border-l border-border bg-card flex flex-col shrink-0 overflow-y-auto p-4 space-y-4">
+          <div className="border-b border-border pb-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-300">
+              Operational Telemetry
             </h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Live telemetry extracted by Sentinel subsystems
+            <p className="text-[11px] text-zinc-500 mt-0.5">
+              Live extracted signals across Sentinel subsystems
             </p>
           </div>
 
-          {/* Customer Sentiment Card */}
-          <div className="p-3.5 rounded-xl bg-card border border-border space-y-2.5">
-            <span className="text-[11px] font-semibold text-muted-foreground block">
-              Customer Message Sentiment
+          {/* Customer Sentiment */}
+          <div className="p-3.5 rounded-md bg-zinc-900/60 border border-border space-y-2">
+            <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 block">
+              Sentiment Classification
             </span>
             <div className="flex items-center justify-between">
               <SentimentBadge
@@ -646,39 +637,33 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
                 confidence={latestCustomerMessage?.confidence ?? activeConv?.last_confidence ?? 1.0}
               />
             </div>
-            <div className="text-[11px] text-muted-foreground flex justify-between">
-              <span>Confidence:</span>
-              <span className="font-semibold text-foreground">
-                {Math.round((latestCustomerMessage?.confidence ?? activeConv?.last_confidence ?? 1.0) * 100)}%
-              </span>
-            </div>
           </div>
 
-          {/* Risk Classification & Level Card */}
-          <div className="p-3.5 rounded-xl bg-card border border-border space-y-2.5">
-            <span className="text-[11px] font-semibold text-muted-foreground block">
-              Risk & Safety Classification
+          {/* Risk Classification & Level */}
+          <div className="p-3.5 rounded-md bg-zinc-900/60 border border-border space-y-2">
+            <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 block">
+              Risk & Safety Status
             </span>
             <div className="space-y-1.5 text-xs">
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Risk Status:</span>
-                <span className={`font-semibold ${activeConv?.is_high_risk ? 'text-rose-500' : 'text-emerald-500'}`}>
-                  {activeConv?.is_high_risk ? 'HIGH RISK DETECTED' : 'CLEAR'}
+                <span className="text-zinc-400">Risk Assessment:</span>
+                <span className={`font-mono text-[11px] font-semibold ${activeConv?.is_high_risk ? 'text-red-400' : 'text-emerald-400'}`}>
+                  {activeConv?.is_high_risk ? 'HIGH RISK' : 'CLEAR'}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Risk Level:</span>
-                <span className={`font-mono text-[11px] font-bold uppercase ${
-                  activeRiskLevel === 'critical' ? 'text-rose-600 dark:text-rose-400' :
-                  activeRiskLevel === 'high' ? 'text-orange-500' : 'text-muted-foreground'
+                <span className="text-zinc-400">Severity Level:</span>
+                <span className={`font-mono text-[11px] uppercase ${
+                  activeRiskLevel === 'critical' ? 'text-red-400 font-semibold' :
+                  activeRiskLevel === 'high' ? 'text-amber-400' : 'text-zinc-500'
                 }`}>
                   {activeRiskLevel.toUpperCase()}
                 </span>
               </div>
               {activeRiskCategory && (
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Classification:</span>
-                  <span className="font-mono text-[11px] text-foreground font-semibold uppercase">
+                <div className="flex items-center justify-between pt-1 border-t border-border">
+                  <span className="text-zinc-400">Category:</span>
+                  <span className="font-mono text-[11px] text-zinc-200 capitalize">
                     {activeRiskCategory.replace('_', ' ')}
                   </span>
                 </div>
@@ -686,48 +671,48 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
             </div>
           </div>
 
-          {/* Escalation & Ticket Routing Card */}
-          <div className="p-3.5 rounded-xl bg-card border border-border space-y-2.5">
-            <span className="text-[11px] font-semibold text-muted-foreground block">
-              Escalation & Ticket Routing
+          {/* Escalation & Ticket Routing */}
+          <div className="p-3.5 rounded-md bg-zinc-900/60 border border-border space-y-2">
+            <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 block">
+              Dispatch & SLA Routing
             </span>
             <div className="space-y-1.5 text-xs">
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Escalation Triggered:</span>
-                <span className={`font-semibold ${activeConv?.escalated ? 'text-orange-500' : 'text-slate-500'}`}>
+                <span className="text-zinc-400">Escalated:</span>
+                <span className={`font-mono text-[11px] ${activeConv?.escalated ? 'text-amber-400 font-semibold' : 'text-zinc-500'}`}>
                   {activeConv?.escalated ? 'YES' : 'NO'}
                 </span>
               </div>
               {activeConv?.escalation_reason && (
-                <div className="pt-1 border-t border-border/60">
-                  <span className="text-muted-foreground block">Reason:</span>
-                  <span className="font-mono text-[11px] text-foreground font-medium">
+                <div className="pt-1 border-t border-border">
+                  <span className="text-zinc-500 text-[10px] block">Trigger Reason:</span>
+                  <span className="font-mono text-[11px] text-zinc-300">
                     {activeConv.escalation_reason}
                   </span>
                 </div>
               )}
               {activeTicketId && (
-                <div className="pt-1.5 border-t border-border/60 space-y-1.5">
+                <div className="pt-2 border-t border-border space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Ticket ID:</span>
-                    <span className="font-mono text-[11px] text-primary font-bold">
+                    <span className="text-zinc-400">Ticket ID:</span>
+                    <span className="font-mono text-[11px] text-zinc-200 font-semibold">
                       #{activeTicketId.slice(0, 8)}
                     </span>
                   </div>
                   {activeTeam && (
                     <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Assigned Team:</span>
-                      <span className="font-semibold text-foreground uppercase">
+                      <span className="text-zinc-400">Assigned Team:</span>
+                      <span className="font-medium text-zinc-200 uppercase text-[11px]">
                         {activeTeam.replace('_', ' ')}
                       </span>
                     </div>
                   )}
                   <button
                     onClick={() => onNavigateToTicket && onNavigateToTicket(activeTicketId)}
-                    className="w-full mt-2 flex items-center justify-center gap-1.5 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-semibold shadow-sm hover:opacity-90"
+                    className="w-full mt-1.5 flex items-center justify-center gap-1.5 py-1.5 rounded bg-zinc-100 text-zinc-950 text-xs font-medium hover:bg-white transition-colors"
                   >
                     <TicketIcon className="w-3.5 h-3.5" />
-                    <span>View Support Ticket</span>
+                    <span>View in Ticket Queue</span>
                   </button>
                 </div>
               )}
@@ -736,20 +721,20 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
 
           {/* Grounding Knowledge Sources */}
           {activeSources.length > 0 && (
-            <div className="p-3.5 rounded-xl bg-card border border-border space-y-2 text-xs">
-              <span className="text-[11px] font-semibold text-muted-foreground block">
-                Verified Knowledge Sources
+            <div className="p-3.5 rounded-md bg-zinc-900/60 border border-border space-y-2 text-xs">
+              <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 block">
+                Grounded Knowledge Sources
               </span>
               <div className="space-y-1.5">
                 {activeSources.map((src, i) => (
-                  <div key={i} className="p-2 rounded bg-muted/60 border border-border text-[11px] space-y-0.5">
-                    <div className="font-semibold text-foreground flex items-center gap-1">
-                      <ExternalLink className="w-3 h-3 text-primary shrink-0" />
+                  <div key={i} className="p-2 rounded bg-zinc-950 border border-border text-[11px] space-y-0.5">
+                    <div className="font-medium text-zinc-200 flex items-center gap-1">
+                      <ExternalLink className="w-3 h-3 text-zinc-500 shrink-0" />
                       <span>{src.title || src.document_id}</span>
                     </div>
                     {src.version && (
-                      <div className="text-[10px] text-muted-foreground">
-                        Version {src.version} • {src.access_level?.toUpperCase()}
+                      <div className="text-[10px] font-mono text-zinc-500">
+                        v{src.version} • {src.access_level?.toUpperCase()}
                       </div>
                     )}
                   </div>
@@ -758,23 +743,23 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
             </div>
           )}
 
-          {/* Customer Metadata Card */}
-          <div className="p-3.5 rounded-xl bg-card border border-border space-y-2 text-xs">
-            <span className="text-[11px] font-semibold text-muted-foreground block">Customer Details</span>
-            <div className="space-y-1 text-muted-foreground">
+          {/* Customer Metadata */}
+          <div className="p-3.5 rounded-md bg-zinc-900/60 border border-border space-y-2 text-xs">
+            <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 block">Session Metadata</span>
+            <div className="space-y-1 text-zinc-400 text-[11px]">
               <div className="flex justify-between">
                 <span>Customer ID:</span>
-                <span className="font-mono text-foreground font-medium">{customerId}</span>
+                <span className="font-mono text-zinc-200">{customerId}</span>
               </div>
               <div className="flex justify-between">
-                <span>Language:</span>
-                <span className="text-foreground font-medium uppercase">
+                <span>Detected Lang:</span>
+                <span className="font-mono text-zinc-200 uppercase">
                   {latestCustomerMessage?.language || 'en'}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span>Access Level:</span>
-                <span className="text-foreground capitalize font-medium">{accessLevel}</span>
+                <span className="capitalize text-zinc-200">{accessLevel}</span>
               </div>
             </div>
           </div>
@@ -783,4 +768,3 @@ export const ChatPage: React.FC<Props> = ({ initialSessionId, onNavigateToTicket
     </div>
   );
 };
-

@@ -3,11 +3,9 @@ import {
   Sliders,
   Clock,
   Shield,
-  Languages,
+  Zap,
   CheckCircle,
   Save,
-  RotateCcw,
-  Zap,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { AdminSettings } from '../types';
@@ -85,225 +83,228 @@ export const SettingsPage: React.FC = () => {
   if (loading && !settings) {
     return (
       <div className="p-8 flex items-center justify-center min-h-[400px]">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <div className="w-6 h-6 border-2 border-zinc-500 border-t-zinc-200 rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-6">
+    <div className="p-6 lg:p-8 max-w-4xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border pb-4">
         <div>
-          <h1 className="text-xl font-bold text-foreground tracking-tight">System Administration</h1>
-          <p className="text-xs text-muted-foreground">
-            Configure business hours, SLA response thresholds, escalation rules, and session limits.
+          <h1 className="text-lg font-semibold text-zinc-100 tracking-tight">System Administration & Operational Policies</h1>
+          <p className="text-xs text-zinc-400 mt-0.5">
+            Configure business hours, SLA response thresholds, escalation triggers, and session timeouts.
           </p>
         </div>
         {savedSuccess && (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold animate-fade-in">
-            <CheckCircle className="w-4 h-4" />
-            <span>Settings Saved & Applied in Real-Time</span>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono">
+            <CheckCircle className="w-3.5 h-3.5" />
+            <span>Applied in Real-Time</span>
           </div>
         )}
       </div>
 
       <form onSubmit={handleSave} className="space-y-6 text-xs">
-        {/* Business Hours & After-Hours Configuration */}
-        <div className="p-6 rounded-xl bg-card border border-border shadow-sm space-y-4">
-          <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Operating Business Hours</h2>
+        {/* Operating Business Hours */}
+        <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-border pb-3">
+            <div>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-200">
+                Operating Business Hours (EST / Local)
+              </h2>
+              <p className="text-[11px] text-zinc-500 mt-0.5">
+                Inquiries outside these hours are triaged: urgent queries route to on-call duty, standard complaints hold for next business day.
+              </p>
+            </div>
+            <Clock className="w-4 h-4 text-zinc-500 shrink-0" />
           </div>
-          <p className="text-xs text-muted-foreground">
-            Inquiries outside these hours are triaged: urgent issues route to the On-Call Queue, normal complaints schedule for next business day.
-          </p>
 
-          <div className="grid grid-cols-2 gap-4 pt-2">
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="font-semibold text-foreground">Start Hour (24h format):</label>
+              <label className="text-zinc-400 font-medium text-[11px] uppercase tracking-wider block">
+                Start Hour (24h format)
+              </label>
               <input
                 type="number"
                 min={0}
                 max={23}
                 value={bhStart}
                 onChange={(e) => setBhStart(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-lg bg-muted/40 border border-border text-foreground font-mono text-xs"
+                className="w-full px-3 py-1.5 rounded bg-zinc-900 border border-border text-zinc-200 font-mono text-xs focus:outline-none focus:border-zinc-500"
               />
-              <span className="text-[10px] text-muted-foreground">Default: 09:00 AM</span>
+              <span className="text-[10px] text-zinc-500 font-mono">09:00 AM standard</span>
             </div>
 
             <div className="space-y-1">
-              <label className="font-semibold text-foreground">End Hour (24h format):</label>
+              <label className="text-zinc-400 font-medium text-[11px] uppercase tracking-wider block">
+                End Hour (24h format)
+              </label>
               <input
                 type="number"
                 min={0}
                 max={23}
                 value={bhEnd}
                 onChange={(e) => setBhEnd(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-lg bg-muted/40 border border-border text-foreground font-mono text-xs"
+                className="w-full px-3 py-1.5 rounded bg-zinc-900 border border-border text-zinc-200 font-mono text-xs focus:outline-none focus:border-zinc-500"
               />
-              <span className="text-[10px] text-muted-foreground">Default: 18:00 PM (6:00 PM)</span>
+              <span className="text-[10px] text-zinc-500 font-mono">18:00 PM standard (6:00 PM)</span>
             </div>
           </div>
         </div>
 
-        {/* SLA Response Rules */}
-        <div className="p-6 rounded-xl bg-card border border-border shadow-sm space-y-4">
-          <div className="flex items-center gap-2">
-            <Zap className="w-4 h-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">SLA Response Windows (Business Hours)</h2>
+        {/* SLA Windows */}
+        <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-border pb-3">
+            <div>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-200">
+                SLA Response Deadlines (Business Hours)
+              </h2>
+              <p className="text-[11px] text-zinc-500 mt-0.5">
+                SLA deadlines skip weekends and holidays automatically, triggering supervisor alerts at 75% elapsed.
+              </p>
+            </div>
+            <Zap className="w-4 h-4 text-zinc-500 shrink-0" />
           </div>
-          <p className="text-xs text-muted-foreground">
-            SLA deadlines automatically exclude configured weekends and statutory holidays, issuing warnings at 75% elapsed.
-          </p>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="space-y-1">
-              <label className="font-semibold text-rose-500">Critical Priority (Hours):</label>
+              <label className="text-red-400 font-mono text-[11px] uppercase tracking-wider block">
+                Critical Priority
+              </label>
               <input
                 type="number"
                 step="0.5"
                 min="0.5"
                 value={criticalSla}
                 onChange={(e) => setCriticalSla(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-lg bg-muted/40 border border-border text-foreground font-mono text-xs"
+                className="w-full px-3 py-1.5 rounded bg-zinc-900 border border-border text-zinc-200 font-mono text-xs focus:outline-none focus:border-zinc-500"
               />
+              <span className="text-[10px] text-zinc-500 font-mono">Hours (e.g. 1.0h)</span>
             </div>
 
             <div className="space-y-1">
-              <label className="font-semibold text-orange-500">High Priority (Hours):</label>
+              <label className="text-amber-400 font-mono text-[11px] uppercase tracking-wider block">
+                High Priority
+              </label>
               <input
                 type="number"
                 step="0.5"
                 min="1"
                 value={highSla}
                 onChange={(e) => setHighSla(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-lg bg-muted/40 border border-border text-foreground font-mono text-xs"
+                className="w-full px-3 py-1.5 rounded bg-zinc-900 border border-border text-zinc-200 font-mono text-xs focus:outline-none focus:border-zinc-500"
               />
+              <span className="text-[10px] text-zinc-500 font-mono">Hours (e.g. 4.0h)</span>
             </div>
 
             <div className="space-y-1">
-              <label className="font-semibold text-amber-500">Medium Priority (Hours):</label>
+              <label className="text-zinc-300 font-mono text-[11px] uppercase tracking-wider block">
+                Medium Priority
+              </label>
               <input
                 type="number"
                 step="1"
                 min="1"
                 value={mediumSla}
                 onChange={(e) => setMediumSla(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-lg bg-muted/40 border border-border text-foreground font-mono text-xs"
+                className="w-full px-3 py-1.5 rounded bg-zinc-900 border border-border text-zinc-200 font-mono text-xs focus:outline-none focus:border-zinc-500"
               />
+              <span className="text-[10px] text-zinc-500 font-mono">Hours (e.g. 8.0h)</span>
             </div>
 
             <div className="space-y-1">
-              <label className="font-semibold text-slate-500">Low Priority (Hours):</label>
+              <label className="text-zinc-500 font-mono text-[11px] uppercase tracking-wider block">
+                Low Priority
+              </label>
               <input
                 type="number"
                 step="1"
                 min="1"
                 value={lowSla}
                 onChange={(e) => setLowSla(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-lg bg-muted/40 border border-border text-foreground font-mono text-xs"
+                className="w-full px-3 py-1.5 rounded bg-zinc-900 border border-border text-zinc-200 font-mono text-xs focus:outline-none focus:border-zinc-500"
               />
+              <span className="text-[10px] text-zinc-500 font-mono">Hours (e.g. 24.0h)</span>
             </div>
           </div>
         </div>
 
         {/* Escalation & Session Limits */}
-        <div className="p-6 rounded-xl bg-card border border-border shadow-sm space-y-4">
-          <div className="flex items-center gap-2">
-            <Shield className="w-4 h-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Escalation & Session Parameters</h2>
+        <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-border pb-3">
+            <div>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-200">
+                Escalation Thresholds & Session Lifecycle
+              </h2>
+              <p className="text-[11px] text-zinc-500 mt-0.5">
+                Controls consecutive negative emotion triggers and session memory expiration.
+              </p>
+            </div>
+            <Shield className="w-4 h-4 text-zinc-500 shrink-0" />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1">
-              <label className="font-semibold text-foreground">Repeated Negative Threshold:</label>
+              <label className="text-zinc-400 font-medium text-[11px] uppercase tracking-wider block">
+                Negative Escalation Count
+              </label>
               <input
                 type="number"
-                min={2}
+                min={1}
                 max={10}
                 value={negativeThreshold}
                 onChange={(e) => setNegativeThreshold(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-lg bg-muted/40 border border-border text-foreground font-mono text-xs"
+                className="w-full px-3 py-1.5 rounded bg-zinc-900 border border-border text-zinc-200 font-mono text-xs focus:outline-none focus:border-zinc-500"
               />
-              <span className="text-[10px] text-muted-foreground">Consecutive negative/frustrated messages (default: 3)</span>
+              <span className="text-[10px] text-zinc-500">Consecutive negative customer inputs</span>
             </div>
 
             <div className="space-y-1">
-              <label className="font-semibold text-foreground">Unresolved Timeout (Minutes):</label>
+              <label className="text-zinc-400 font-medium text-[11px] uppercase tracking-wider block">
+                Unresolved Case Timeout
+              </label>
               <input
                 type="number"
                 min={5}
-                max={60}
+                max={120}
                 value={unresolvedTimeout}
                 onChange={(e) => setUnresolvedTimeout(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-lg bg-muted/40 border border-border text-foreground font-mono text-xs"
+                className="w-full px-3 py-1.5 rounded bg-zinc-900 border border-border text-zinc-200 font-mono text-xs focus:outline-none focus:border-zinc-500"
               />
-              <span className="text-[10px] text-muted-foreground">Negative conversation auto-escalation (default: 15m)</span>
+              <span className="text-[10px] text-zinc-500">Minutes before supervisor escalation</span>
             </div>
 
             <div className="space-y-1">
-              <label className="font-semibold text-foreground">Session Inactivity Timeout (Minutes):</label>
+              <label className="text-zinc-400 font-medium text-[11px] uppercase tracking-wider block">
+                Session Inactivity Window
+              </label>
               <input
                 type="number"
-                min={10}
-                max={120}
+                min={5}
+                max={180}
                 value={sessionTimeout}
                 onChange={(e) => setSessionTimeout(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-lg bg-muted/40 border border-border text-foreground font-mono text-xs"
+                className="w-full px-3 py-1.5 rounded bg-zinc-900 border border-border text-zinc-200 font-mono text-xs focus:outline-none focus:border-zinc-500"
               />
-              <span className="text-[10px] text-muted-foreground">Inactivity close window (default: 30m, restore &lt; 24h)</span>
+              <span className="text-[10px] text-zinc-500">Minutes before session memory cleanup</span>
             </div>
           </div>
         </div>
 
-        {/* Read-Only System Architecture Metadata */}
-        <div className="p-6 rounded-xl bg-muted/30 border border-border space-y-3">
-          <div className="flex items-center gap-2">
-            <Languages className="w-4 h-4 text-primary" />
-            <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">
-              Connected Subsystems & Security Architecture
-            </h3>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1 text-[11px]">
-            <div className="p-2.5 rounded-lg bg-card border border-border">
-              <span className="text-muted-foreground block">Languages:</span>
-              <span className="font-semibold text-foreground uppercase">
-                {settings?.supported_languages?.join(', ') || 'EN, ES, FR, HI'}
-              </span>
-            </div>
-            <div className="p-2.5 rounded-lg bg-card border border-border">
-              <span className="text-muted-foreground block">RBAC Tiers:</span>
-              <span className="font-semibold text-foreground capitalize">
-                {settings?.access_levels?.join(', ') || 'Public, Internal, Restricted, Confidential'}
-              </span>
-            </div>
-            <div className="p-2.5 rounded-lg bg-card border border-border">
-              <span className="text-muted-foreground block">Maintenance Window:</span>
-              <span className="font-semibold text-foreground">01:00 AM – 05:00 AM</span>
-            </div>
-            <div className="p-2.5 rounded-lg bg-card border border-border">
-              <span className="text-muted-foreground block">Quality Gate Thresholds:</span>
-              <span className="font-semibold text-foreground">Accuracy ≥ 85%, Grounding ≥ 80%</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Submit Button */}
-        <div className="flex justify-end pt-2">
+        {/* Save Bar */}
+        <div className="flex items-center justify-end gap-3 pt-2">
           <button
             type="submit"
             disabled={saving}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-primary-foreground font-semibold text-xs shadow-sm hover:opacity-95 transition-opacity disabled:opacity-50"
+            className="px-4 py-2 rounded bg-zinc-100 text-zinc-950 hover:bg-white text-xs font-medium transition-colors shadow-sm disabled:opacity-50 flex items-center gap-1.5"
           >
-            <Save className="w-4 h-4" />
-            <span>{saving ? 'Applying Settings...' : 'Save Configuration Changes'}</span>
+            <Save className="w-3.5 h-3.5" />
+            <span>{saving ? 'Updating Settings...' : 'Save Configuration'}</span>
           </button>
         </div>
       </form>
     </div>
   );
 };
-

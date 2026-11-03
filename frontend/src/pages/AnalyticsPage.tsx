@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   BarChart3,
   TrendingUp,
-  PieChart,
   Globe,
   Clock,
   ShieldAlert,
@@ -40,7 +39,7 @@ export const AnalyticsPage: React.FC = () => {
   if (loading && !overview) {
     return (
       <div className="p-8 flex items-center justify-center min-h-[400px]">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <div className="w-6 h-6 border-2 border-zinc-500 border-t-zinc-200 rounded-full animate-spin" />
       </div>
     );
   }
@@ -50,63 +49,98 @@ export const AnalyticsPage: React.FC = () => {
       ? Math.round((overview.resolved_tickets / overview.total_tickets) * 100)
       : 100;
 
+  const escalationRatio =
+    overview && overview.total_conversations > 0
+      ? Math.round((overview.escalated_conversations / overview.total_conversations) * 100)
+      : 0;
+
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8">
+    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       {/* Page Header */}
-      <div>
-        <h1 className="text-xl font-bold text-foreground tracking-tight">
-          Executive Analytics & Telemetry
+      <div className="border-b border-border pb-4">
+        <h1 className="text-lg font-semibold text-zinc-100 tracking-tight">
+          Executive Telemetry & BI Operations
         </h1>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-zinc-400 mt-0.5">
           Operational metrics computed across multilingual conversations, SLA compliance, and team workload.
         </p>
       </div>
 
       {/* KPI Highlight Strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="p-4 rounded-xl bg-card border border-border shadow-sm">
-          <span className="text-xs text-muted-foreground font-medium">Ticket Resolution Rate</span>
-          <div className="text-2xl font-bold text-emerald-500 mt-1">{resolutionRate}%</div>
-          <span className="text-[11px] text-muted-foreground">{overview?.resolved_tickets} of {overview?.total_tickets} closed</span>
-        </div>
-
-        <div className="p-4 rounded-xl bg-card border border-border shadow-sm">
-          <span className="text-xs text-muted-foreground font-medium">Escalation Ratio</span>
-          <div className="text-2xl font-bold text-orange-500 mt-1">
-            {overview && overview.total_conversations > 0
-              ? Math.round((overview.escalated_conversations / overview.total_conversations) * 100)
-              : 0}%
+      <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <div className="grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-border">
+          <div className="p-4 lg:p-5 flex flex-col justify-between">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+              Resolution Efficiency
+            </span>
+            <div className="mt-2">
+              <div className="text-2xl font-semibold font-mono tracking-tight text-emerald-400 tabular-nums">
+                {resolutionRate}%
+              </div>
+              <span className="text-[11px] text-zinc-500 mt-1 block">
+                {overview?.resolved_tickets} of {overview?.total_tickets} closed
+              </span>
+            </div>
           </div>
-          <span className="text-[11px] text-muted-foreground">{overview?.escalated_conversations} total escalations</span>
-        </div>
 
-        <div className="p-4 rounded-xl bg-card border border-border shadow-sm">
-          <span className="text-xs text-muted-foreground font-medium">High Risk Frequency</span>
-          <div className="text-2xl font-bold text-rose-500 mt-1">
-            {overview?.high_risk_incidents || 0}
+          <div className="p-4 lg:p-5 flex flex-col justify-between">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+              Escalation Ratio
+            </span>
+            <div className="mt-2">
+              <div className="text-2xl font-semibold font-mono tracking-tight text-amber-400 tabular-nums">
+                {escalationRatio}%
+              </div>
+              <span className="text-[11px] text-zinc-500 mt-1 block">
+                {overview?.escalated_conversations} total escalations
+              </span>
+            </div>
           </div>
-          <span className="text-[11px] text-muted-foreground">Compromise & fraud alerts</span>
-        </div>
 
-        <div className="p-4 rounded-xl bg-card border border-border shadow-sm">
-          <span className="text-xs text-muted-foreground font-medium">Deterministic Latency</span>
-          <div className="text-2xl font-bold text-foreground mt-1">
-            {overview?.average_response_time_ms || 45} ms
+          <div className="p-4 lg:p-5 flex flex-col justify-between">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+              High-Risk Incidents
+            </span>
+            <div className="mt-2">
+              <div className={`text-2xl font-semibold font-mono tracking-tight tabular-nums ${
+                (overview?.high_risk_incidents || 0) > 0 ? 'text-red-400' : 'text-zinc-100'
+              }`}>
+                {overview?.high_risk_incidents || 0}
+              </div>
+              <span className="text-[11px] text-zinc-500 mt-1 block">
+                Account breach & fraud alerts
+              </span>
+            </div>
           </div>
-          <span className="text-[11px] text-muted-foreground">Under 200ms enterprise SLA</span>
+
+          <div className="p-4 lg:p-5 flex flex-col justify-between">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+              Mean Latency
+            </span>
+            <div className="mt-2">
+              <div className="text-2xl font-semibold font-mono tracking-tight text-zinc-100 tabular-nums">
+                {overview?.average_response_time_ms || 42} <span className="text-xs font-normal text-zinc-500">ms</span>
+              </div>
+              <span className="text-[11px] text-zinc-500 mt-1 block">
+                P99 response SLA target: 200ms
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Charts Grid */}
+      {/* Analytics Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Support Team Workload */}
-        <div className="p-6 rounded-xl bg-card border border-border shadow-sm space-y-4">
+        <div className="rounded-lg border border-border bg-card p-5 space-y-4">
           <div>
-            <h2 className="text-sm font-semibold text-foreground">Active Team Workload</h2>
-            <p className="text-xs text-muted-foreground">Distribution of open tickets by routing team</p>
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-300">
+              Active Team Workload Dispatch
+            </h2>
+            <p className="text-[11px] text-zinc-500 mt-0.5">Distribution of open tickets by specialized routing team</p>
           </div>
 
-          <div className="space-y-3 pt-2">
+          <div className="space-y-3 pt-1">
             {trends?.team_workload &&
               Object.entries(trends.team_workload).map(([team, count]) => {
                 const total = Math.max(
@@ -118,20 +152,22 @@ export const AnalyticsPage: React.FC = () => {
                 return (
                   <div key={team} className="space-y-1">
                     <div className="flex justify-between text-xs">
-                      <span className="capitalize font-semibold text-foreground">{team}</span>
-                      <span className="text-muted-foreground">{count} tickets ({percent}%)</span>
+                      <span className="capitalize font-medium text-zinc-200">{team} Team</span>
+                      <span className="font-mono text-[11px] text-zinc-400">
+                        {count} tickets <span className="text-zinc-600">({percent}%)</span>
+                      </span>
                     </div>
-                    <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
+                    <div className="w-full h-1.5 rounded-sm bg-zinc-800 overflow-hidden">
                       <div
                         style={{ width: `${percent}%` }}
-                        className="h-full rounded-full bg-primary transition-all duration-300"
+                        className="h-full rounded-sm bg-zinc-400 transition-all duration-300"
                       />
                     </div>
                   </div>
                 );
               })}
             {(!trends?.team_workload || Object.keys(trends.team_workload).length === 0) && (
-              <div className="text-center py-6 text-xs text-muted-foreground">
+              <div className="text-center py-6 text-xs text-zinc-500 font-mono">
                 No active tickets in queue.
               </div>
             )}
@@ -139,34 +175,36 @@ export const AnalyticsPage: React.FC = () => {
         </div>
 
         {/* Multilingual Distribution */}
-        <div className="p-6 rounded-xl bg-card border border-border shadow-sm space-y-4">
+        <div className="rounded-lg border border-border bg-card p-5 space-y-4">
           <div>
-            <h2 className="text-sm font-semibold text-foreground">Language Distribution</h2>
-            <p className="text-xs text-muted-foreground">
-              Customer inquiries by detected language (English, Spanish, French, Hindi)
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-300">
+              Language Demographics
+            </h2>
+            <p className="text-[11px] text-zinc-500 mt-0.5">
+              Customer inquiries categorized by real-time language detection
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 pt-2">
+          <div className="grid grid-cols-2 gap-3 pt-1">
             {trends?.language_distribution &&
               Object.entries(trends.language_distribution).map(([lang, count]) => {
                 const names: Record<string, string> = {
                   en: 'English',
-                  es: 'Spanish (Español)',
-                  fr: 'French (Français)',
-                  hi: 'Hindi (हिन्दी / Hinglish)',
+                  es: 'Spanish',
+                  fr: 'French',
+                  hi: 'Hindi / Hinglish',
                 };
                 return (
-                  <div key={lang} className="p-3.5 rounded-lg bg-muted/40 border border-border flex items-center justify-between">
+                  <div key={lang} className="p-3 rounded-md bg-zinc-900/60 border border-border flex items-center justify-between">
                     <div>
-                      <span className="font-semibold text-xs text-foreground block">
+                      <span className="font-medium text-xs text-zinc-200 block">
                         {names[lang] || lang.toUpperCase()}
                       </span>
-                      <span className="text-[10px] uppercase font-mono text-muted-foreground">
-                        Code: {lang}
+                      <span className="text-[10px] uppercase font-mono text-zinc-500">
+                        ISO: {lang}
                       </span>
                     </div>
-                    <span className="text-base font-bold text-primary">{count}</span>
+                    <span className="text-base font-semibold font-mono text-zinc-100 tabular-nums">{count}</span>
                   </div>
                 );
               })}
@@ -174,29 +212,31 @@ export const AnalyticsPage: React.FC = () => {
         </div>
 
         {/* Ticket Priorities */}
-        <div className="p-6 rounded-xl bg-card border border-border shadow-sm space-y-4">
+        <div className="rounded-lg border border-border bg-card p-5 space-y-4">
           <div>
-            <h2 className="text-sm font-semibold text-foreground">Priority Breakdown</h2>
-            <p className="text-xs text-muted-foreground">5-factor weighted priority score distribution</p>
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-300">
+              Priority Stratification
+            </h2>
+            <p className="text-[11px] text-zinc-500 mt-0.5">5-factor weighted priority score distribution</p>
           </div>
 
-          <div className="grid grid-cols-4 gap-2 pt-2">
+          <div className="grid grid-cols-4 gap-2.5 pt-1">
             {['critical', 'high', 'medium', 'low'].map((p) => {
               const count = trends?.priority_counts?.[p] || 0;
               return (
-                <div key={p} className="p-3 rounded-lg bg-muted/30 border border-border text-center space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-muted-foreground block">
+                <div key={p} className="p-3 rounded-md bg-zinc-900/50 border border-border text-center space-y-1">
+                  <span className="text-[10px] uppercase font-mono font-medium text-zinc-500 block">
                     {p}
                   </span>
                   <div
-                    className={`text-xl font-bold ${
+                    className={`text-xl font-semibold font-mono tabular-nums ${
                       p === 'critical'
-                        ? 'text-red-500'
+                        ? 'text-red-400'
                         : p === 'high'
-                        ? 'text-orange-500'
+                        ? 'text-amber-400'
                         : p === 'medium'
-                        ? 'text-amber-500'
-                        : 'text-slate-500'
+                        ? 'text-zinc-300'
+                        : 'text-zinc-500'
                     }`}
                   >
                     {count}
@@ -208,20 +248,22 @@ export const AnalyticsPage: React.FC = () => {
         </div>
 
         {/* Ticket Status Lifecycle */}
-        <div className="p-6 rounded-xl bg-card border border-border shadow-sm space-y-4">
+        <div className="rounded-lg border border-border bg-card p-5 space-y-4">
           <div>
-            <h2 className="text-sm font-semibold text-foreground">Ticket Lifecycle Status</h2>
-            <p className="text-xs text-muted-foreground">Current states in the support pipeline</p>
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-300">
+              Support Lifecycle Pipeline
+            </h2>
+            <p className="text-[11px] text-zinc-500 mt-0.5">Current operational state distribution across all tickets</p>
           </div>
 
-          <div className="grid grid-cols-3 gap-2.5 pt-2">
+          <div className="grid grid-cols-3 gap-2.5 pt-1">
             {trends?.status_distribution &&
               Object.entries(trends.status_distribution).map(([status, count]) => (
-                <div key={status} className="p-3 rounded-lg bg-muted/30 border border-border text-center space-y-1">
-                  <span className="text-[10px] uppercase font-semibold text-muted-foreground block">
+                <div key={status} className="p-3 rounded-md bg-zinc-900/50 border border-border text-center space-y-1">
+                  <span className="text-[10px] uppercase font-medium text-zinc-500 block truncate">
                     {status}
                   </span>
-                  <div className="text-lg font-bold text-foreground">{count}</div>
+                  <div className="text-lg font-semibold font-mono text-zinc-200 tabular-nums">{count}</div>
                 </div>
               ))}
           </div>
@@ -230,4 +272,3 @@ export const AnalyticsPage: React.FC = () => {
     </div>
   );
 };
-

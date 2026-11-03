@@ -6,10 +6,10 @@ import {
   BookOpen,
   BarChart3,
   Sliders,
-  Shield,
   Moon,
   Sun,
-  Activity,
+  Shield,
+  Circle,
 } from 'lucide-react';
 
 interface Props {
@@ -37,28 +37,33 @@ export const Sidebar: React.FC<Props> = ({
   ];
 
   return (
-    <aside className="w-64 bg-card border-r border-border flex flex-col justify-between shrink-0 h-screen select-none">
-      {/* Brand Header */}
+    <aside className="w-60 bg-surface-950 dark:bg-[#0c0c0e] border-r border-border flex flex-col justify-between shrink-0 h-screen select-none">
+      {/* Brand & Organization Header */}
       <div>
-        <div className="h-16 px-6 border-b border-border flex items-center justify-between">
+        <div className="h-14 px-4 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-sm">
-              <Shield className="w-5 h-5 text-primary" />
+            <div className="w-7 h-7 rounded-md bg-zinc-800 border border-zinc-700/70 flex items-center justify-center text-zinc-100 shadow-sm">
+              <Shield className="w-4 h-4 text-zinc-200" strokeWidth={2.2} />
             </div>
             <div>
-              <span className="font-bold text-sm tracking-wider text-foreground">SENTINEL</span>
-              <span className="block text-[10px] text-muted-foreground uppercase font-medium tracking-widest">
+              <span className="font-semibold text-xs tracking-wider text-zinc-100 uppercase">Sentinel</span>
+              <span className="block text-[10px] text-zinc-500 font-mono tracking-tight leading-none">
                 Support SaaS
               </span>
             </div>
           </div>
-          <span className="text-[10px] px-2 py-0.5 font-semibold bg-primary/10 text-primary border border-primary/20 rounded-md">
+          <span className="text-[10px] font-mono px-1.5 py-0.5 text-zinc-400 bg-zinc-800/80 border border-zinc-700/50 rounded">
             v2.0
           </span>
         </div>
 
+        {/* Section Label */}
+        <div className="px-4 pt-4 pb-1.5">
+          <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-medium">Workspace</span>
+        </div>
+
         {/* Navigation Links */}
-        <nav className="p-3 space-y-1">
+        <nav className="px-2 space-y-0.5">
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = currentTab === item.id;
@@ -66,20 +71,27 @@ export const Sidebar: React.FC<Props> = ({
               <button
                 key={item.id}
                 onClick={() => onSelectTab(item.id)}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-[13px] transition-all group ${
                   active
-                    ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+                    ? 'bg-zinc-800/90 text-zinc-100 font-medium border border-white/[0.06] shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40 font-normal'
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <Icon className={`w-4 h-4 ${active ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
+                <div className="flex items-center gap-2.5">
+                  <Icon
+                    className={`w-4 h-4 shrink-0 transition-colors ${
+                      active ? 'text-zinc-100' : 'text-zinc-400 group-hover:text-zinc-200'
+                    }`}
+                    strokeWidth={1.75}
+                  />
                   <span>{item.label}</span>
                 </div>
                 {item.badge && (
                   <span
-                    className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-                      active ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-primary/15 text-primary'
+                    className={`text-[10px] font-mono px-1.5 py-0.5 rounded tabular-nums ${
+                      active
+                        ? 'bg-zinc-700 text-zinc-200'
+                        : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50'
                     }`}
                   >
                     {item.badge}
@@ -92,29 +104,30 @@ export const Sidebar: React.FC<Props> = ({
       </div>
 
       {/* Footer Controls & System Status */}
-      <div className="p-4 border-t border-border space-y-3">
-        <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-muted/40 border border-border/50 text-xs">
+      <div className="p-3 border-t border-border space-y-2">
+        <div className="flex items-center justify-between px-2.5 py-1.5 rounded-md bg-zinc-900/60 border border-zinc-800/60 text-xs">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-muted-foreground font-medium">Engine Active</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            <span className="text-[11px] text-zinc-400 font-medium">Engine Active</span>
           </div>
-          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold uppercase">
-            6 Subsystems
-          </span>
+          <span className="text-[10px] font-mono text-zinc-500">6/6 Systems</span>
         </div>
 
         <button
           onClick={onToggleTheme}
-          className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors border border-transparent hover:border-border"
+          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12px] text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40 transition-colors"
         >
-          <div className="flex items-center gap-2.5">
-            {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600" />}
-            <span>{isDark ? 'Light Theme' : 'Dark Theme'}</span>
+          <div className="flex items-center gap-2">
+            {isDark ? (
+              <Sun className="w-3.5 h-3.5 text-zinc-400" strokeWidth={1.75} />
+            ) : (
+              <Moon className="w-3.5 h-3.5 text-zinc-400" strokeWidth={1.75} />
+            )}
+            <span>{isDark ? 'Light Mode' : 'Dark Mode'}</span>
           </div>
-          <span className="text-[10px] text-muted-foreground font-mono">⌘T</span>
+          <span className="text-[10px] font-mono text-zinc-500 border border-zinc-800 px-1 rounded">⌘T</span>
         </button>
       </div>
     </aside>
   );
 };
-

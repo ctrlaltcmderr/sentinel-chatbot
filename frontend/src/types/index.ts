@@ -20,20 +20,20 @@ export interface FileInfo {
 }
 
 export interface ChatMessage {
-  id: number;
+  id: number | string;
   session_id: string;
   sender: 'customer' | 'sentinel';
   content: string;
   timestamp: string;
-  language: string;
+  language?: string;
   sentiment?: SentimentType;
   confidence?: number;
-  is_high_risk: boolean;
+  is_high_risk?: boolean;
   risk_category?: string;
   risk_level?: string;
   ticket_id?: string;
   assigned_team?: string;
-  escalated: boolean;
+  escalated?: boolean;
   escalation_reason?: string;
   sources?: any[];
   file_info?: FileInfo | null;

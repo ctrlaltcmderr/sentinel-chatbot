@@ -6,36 +6,55 @@ interface Props {
   size?: 'sm' | 'md';
 }
 
-export const StatusBadge: React.FC<Props> = ({ status = 'Open', size = 'md' }) => {
+export const StatusBadge: React.FC<Props> = ({ status = 'Open', size = 'sm' }) => {
   const s = status.toLowerCase();
 
   const getStyle = () => {
     switch (s) {
       case 'open':
-        return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20';
+        return {
+          pill: 'bg-zinc-800/70 text-zinc-300 border-zinc-700/60 dark:bg-zinc-800/60 dark:text-zinc-200',
+          dot: 'bg-zinc-400',
+        };
       case 'in progress':
-        return 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20';
+        return {
+          pill: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+          dot: 'bg-indigo-400',
+        };
       case 'pending':
-        return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
+        return {
+          pill: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+          dot: 'bg-amber-400',
+        };
       case 'escalated':
-        return 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 font-semibold';
+        return {
+          pill: 'bg-red-500/10 text-red-400 border-red-500/20 font-medium',
+          dot: 'bg-red-500 animate-pulse',
+        };
       case 'resolved':
-        return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
+        return {
+          pill: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+          dot: 'bg-emerald-500',
+        };
       case 'closed':
       default:
-        return 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20';
+        return {
+          pill: 'bg-zinc-800/40 text-zinc-500 border-zinc-800/60',
+          dot: 'bg-zinc-600',
+        };
     }
   };
 
+  const style = getStyle();
+
   return (
     <span
-      className={`inline-flex items-center gap-1.5 font-medium border rounded-full ${
-        size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-xs'
-      } ${getStyle()}`}
+      className={`inline-flex items-center gap-1.5 font-medium border rounded-md capitalize ${
+        size === 'sm' ? 'px-2 py-0.5 text-[11px]' : 'px-2.5 py-1 text-xs'
+      } ${style.pill}`}
     >
-      <span className="w-1.5 h-1.5 rounded-full bg-current" />
-      {status}
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${style.dot}`} />
+      <span className="truncate">{status}</span>
     </span>
   );
 };
-

@@ -1,5 +1,4 @@
 import React from 'react';
-import { Smile, Meh, Frown, Flame, Zap, Sparkles, ShieldAlert } from 'lucide-react';
 import { SentimentType } from '../types';
 
 interface Props {
@@ -13,47 +12,50 @@ export const SentimentBadge: React.FC<Props> = ({
   sentiment = 'neutral',
   confidence,
   isHighRisk = false,
-  size = 'md',
+  size = 'sm',
 }) => {
   const s = (sentiment || 'neutral').toLowerCase();
 
   const getStyle = () => {
+    // If flagged as high-risk, critical red override
+    if (isHighRisk || s === 'urgent') {
+      return {
+        pill: 'bg-red-500/10 text-red-400 border-red-500/20',
+        dot: 'bg-red-500',
+        label: isHighRisk ? 'Critical Risk' : 'Urgent',
+      };
+    }
+
     switch (s) {
       case 'positive':
         return {
-          bg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
-          icon: <Smile className={size === 'sm' ? 'w-3 h-3' : 'w-3.5 h-3.5'} />,
+          pill: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+          dot: 'bg-emerald-500',
           label: 'Positive',
         };
       case 'negative':
         return {
-          bg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
-          icon: <Frown className={size === 'sm' ? 'w-3 h-3' : 'w-3.5 h-3.5'} />,
+          pill: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+          dot: 'bg-amber-500',
           label: 'Negative',
         };
       case 'frustrated':
         return {
-          bg: 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20',
-          icon: <Flame className={size === 'sm' ? 'w-3 h-3' : 'w-3.5 h-3.5'} />,
+          pill: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+          dot: 'bg-amber-500',
           label: 'Frustrated',
-        };
-      case 'urgent':
-        return {
-          bg: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20',
-          icon: <Zap className={size === 'sm' ? 'w-3 h-3' : 'w-3.5 h-3.5'} />,
-          label: 'Urgent',
         };
       case 'sarcastic':
         return {
-          bg: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
-          icon: <Sparkles className={size === 'sm' ? 'w-3 h-3' : 'w-3.5 h-3.5'} />,
+          pill: 'bg-zinc-800/80 text-zinc-300 border-zinc-700/60 dark:bg-zinc-800/60 dark:text-zinc-300',
+          dot: 'bg-zinc-400',
           label: 'Sarcastic',
         };
       case 'neutral':
       default:
         return {
-          bg: 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20',
-          icon: <Meh className={size === 'sm' ? 'w-3 h-3' : 'w-3.5 h-3.5'} />,
+          pill: 'bg-zinc-800/50 text-zinc-400 border-zinc-700/40 dark:bg-zinc-800/40 dark:text-zinc-400',
+          dot: 'bg-zinc-500',
           label: 'Neutral',
         };
     }
@@ -62,30 +64,18 @@ export const SentimentBadge: React.FC<Props> = ({
   const style = getStyle();
 
   return (
-    <div className="inline-flex items-center gap-1.5">
-      <span
-        className={`inline-flex items-center gap-1 font-medium border rounded-full ${
-          size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-xs'
-        } ${style.bg}`}
-      >
-        {style.icon}
-        <span className="capitalize">{style.label}</span>
-        {confidence !== undefined && (
-          <span className="opacity-70 text-[10px]">({Math.round(confidence * 100)}%)</span>
-        )}
-      </span>
-
-      {isHighRisk && (
-        <span
-          className={`inline-flex items-center gap-1 font-semibold text-rose-600 dark:text-rose-400 bg-rose-500/15 border border-rose-500/30 rounded-full animate-pulse ${
-            size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-xs'
-          }`}
-        >
-          <ShieldAlert className={size === 'sm' ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
-          HIGH RISK
+    <span
+      className={`inline-flex items-center gap-1.5 font-medium border rounded-md capitalize tabular-nums transition-colors ${
+        size === 'sm' ? 'px-2 py-0.5 text-[11px]' : 'px-2.5 py-1 text-xs'
+      } ${style.pill}`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${style.dot}`} />
+      <span>{style.label}</span>
+      {typeof confidence === 'number' && (
+        <span className="text-[10px] opacity-70 font-mono ml-0.5">
+          {Math.round(confidence * 100)}%
         </span>
       )}
-    </div>
+    </span>
   );
 };
-
